@@ -1,5 +1,4 @@
 sctl
-*.db
 .vscode
 config.yaml
 output/
