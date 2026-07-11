@@ -32,8 +32,6 @@ const (
 	panelRight
 )
 
-// --- CONFIGURATION ---
-
 type ScriptConfig struct {
 	NameAlias        string                 `yaml:"name_alias"`
 	Description      string                 `yaml:"description"`
@@ -181,8 +179,6 @@ func SyncCrontab(cfg *Config) error {
 	installCmd := exec.Command("crontab", tmpFile.Name())
 	return installCmd.Run()
 }
-
-// --- TASK ENGINE ---
 
 type TaskYAML struct {
 	Task struct {
@@ -410,8 +406,6 @@ func StopTask(cmd *exec.Cmd) error {
 	return killProcessGroup(cmd)
 }
 
-// --- TUI MODEL & VIEW ---
-
 type ScriptState struct {
 	Config   ScriptConfig
 	TaskID   int
@@ -538,17 +532,18 @@ func initialModel() *model {
 	inputs[0].Focus()
 
 	return &model{
-		config:       cfg,
-		scripts:      scripts,
-		cursor:       0,
-		activePanel:  panelLeft,
-		parallelMode: false,
-		viewport:     viewport.New(0, 0),
-		runningIndex: -1,
-		activeView:   "main",
-		formInputs:   inputs,
-		focusedInput: 0,
-		statusMsg:    "Welcome to sctl! Select a script and press 'R' to run.",
+		config:        cfg,
+		scripts:       scripts,
+		cursor:        0,
+		activePanel:   panelLeft,
+		parallelMode:  false,
+		viewport:      viewport.New(0, 0),
+		runningIndex:  -1,
+		activeView:    "main",
+		formInputs:    inputs,
+		focusedInput:  0,
+		statusMsg:     "Welcome to sctl! Select a script and press 'R' to run.",
+		statusMsgTime: time.Time{},
 	}
 }
 
@@ -864,10 +859,13 @@ func (m *model) submitForm() {
 	m.config.Scripts = append(m.config.Scripts, newConfig)
 	err := SaveConfig(m.config)
 	if err != nil {
+
+		m.config.Scripts = m.config.Scripts[:len(m.config.Scripts)-1]
 		m.statusMsg = fmt.Sprintf("Error saving config: %v", err)
-	} else {
-		m.statusMsg = fmt.Sprintf("Successfully added script '%s'.", alias)
+		m.statusMsgTime = time.Now()
+		return
 	}
+	m.statusMsg = fmt.Sprintf("Successfully added script '%s'.", alias)
 	m.statusMsgTime = time.Now()
 
 	m.scripts = append(m.scripts, ScriptState{
@@ -1002,7 +1000,26 @@ func (m *model) submitEnvForm() {
 	cronVal := strings.TrimSpace(m.envInputs[0].Value())
 	focusedScript.Config.Cron = cronVal
 
+	existingKeys := make([]string, 0, len(focusedScript.Config.Input))
+	for k := range focusedScript.Config.Input {
+		existingKeys = append(existingKeys, k)
+	}
+	sort.Strings(existingKeys)
+	shownInForm := make(map[string]bool)
+	for i, k := range existingKeys {
+		if i >= 5 {
+			break
+		}
+		shownInForm[k] = true
+	}
+
 	inputsMap := make(map[string]interface{})
+	for k, v := range focusedScript.Config.Input {
+		if !shownInForm[k] {
+			inputsMap[k] = v
+		}
+	}
+
 	for i := 1; i < 11; i += 2 {
 		k := strings.TrimSpace(m.envInputs[i].Value())
 		v := strings.TrimSpace(m.envInputs[i+1].Value())
@@ -1037,10 +1054,40 @@ func isValidCron(cronStr string) bool {
 	if len(parts) != 5 {
 		return false
 	}
-	for _, p := range parts {
-		for _, r := range p {
-			if !((r >= '0' && r <= '9') || r == '*' || r == '/' || r == '-' || r == ',' || r == '?') {
+
+	maxVals := []int{59, 23, 31, 12, 7}
+	for fi, p := range parts {
+		if p == "*" {
+			continue
+		}
+
+		base := p
+		if idx := strings.Index(p, "/"); idx >= 0 {
+			stepStr := p[idx+1:]
+			base = p[:idx]
+			for _, r := range stepStr {
+				if r < '0' || r > '9' {
+					return false
+				}
+			}
+		}
+		if base == "*" || base == "" {
+			continue
+		}
+
+		for _, seg := range strings.Split(base, ",") {
+			bounds := strings.Split(seg, "-")
+			if len(bounds) > 2 {
 				return false
+			}
+			for _, b := range bounds {
+				var n int
+				if _, err := fmt.Sscanf(b, "%d", &n); err != nil {
+					return false
+				}
+				if n < 0 || n > maxVals[fi] {
+					return false
+				}
 			}
 		}
 	}
@@ -1059,7 +1106,17 @@ func (m *model) deleteSelectedScript() {
 		_ = StopTask(script.Cmd)
 	}
 
-	m.config.Scripts = append(m.config.Scripts[:idx], m.config.Scripts[idx+1:]...)
+	aliasToDelete := script.Config.NameAlias
+	configIdx := -1
+	for ci, sc := range m.config.Scripts {
+		if sc.NameAlias == aliasToDelete {
+			configIdx = ci
+			break
+		}
+	}
+	if configIdx >= 0 {
+		m.config.Scripts = append(m.config.Scripts[:configIdx], m.config.Scripts[configIdx+1:]...)
+	}
 	_ = SaveConfig(m.config)
 
 	m.scripts = append(m.scripts[:idx], m.scripts[idx+1:]...)
@@ -1170,6 +1227,10 @@ func (m *model) runSelected() tea.Cmd {
 				}
 			}
 			if !inQueue && m.runningIndex != idx && m.scripts[idx].State != "Running" {
+
+				m.scripts[idx].Logs = ""
+				m.scripts[idx].Progress = 0
+				m.scripts[idx].State = "Idle"
 				m.runQueue = append(m.runQueue, idx)
 			}
 		}
@@ -1225,6 +1286,12 @@ func (m *model) stopSelected() {
 }
 
 func (m *model) openHTMLOutput() {
+
+	if len(m.scripts) == 0 {
+		m.statusMsg = "No scripts available to open HTML output."
+		m.statusMsgTime = time.Now()
+		return
+	}
 	script := m.scripts[m.cursor]
 	folder := script.Config.OutputFolderPath
 
@@ -1356,7 +1423,6 @@ func (m *model) renderLeftPanel(width, height int) string {
 			progPercent = fmt.Sprintf(" %d%%", script.Progress)
 		}
 
-		// Available width inside the card container (width - 8)
 		availableWidth := width - 8
 		if availableWidth < 10 {
 			availableWidth = 10
@@ -1487,7 +1553,7 @@ func (m *model) renderBottomBar(width int) string {
 func (m *model) renderFramedBox(titleText string, titleColor string, borderColor string, innerContent []string, boxWidth int) string {
 	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(borderColor))
 
-	titleLen := len(titleText)
+	titleLen := lipgloss.Width(titleText)
 	dashesCount := boxWidth - 3 - titleLen
 	if dashesCount < 1 {
 		dashesCount = 1
@@ -1502,7 +1568,7 @@ func (m *model) renderFramedBox(titleText string, titleColor string, borderColor
 	var s strings.Builder
 	s.WriteString(borderStyle.Render(topBorder) + "\n")
 
-	contentWidth := boxWidth - 4 // border + spacing
+	contentWidth := boxWidth - 4
 	for _, line := range innerContent {
 		w := lipgloss.Width(line)
 		var paddedLine string
@@ -1706,16 +1772,16 @@ func getLargeLogo() string {
 		"         ░                         ",
 	}
 	colors := []string{
-		"#ff007f", // Neon Pink
+		"#ff007f",
 		"#eb1097",
 		"#d720af",
 		"#c330c7",
 		"#af40df",
-		"#9b50f7", // Purple
-		"#707eff", // Blue-Purple
-		"#45acff", // Blue
-		"#1ad9ff", // Cyan
-		"#00ffd7", // Neon Teal
+		"#9b50f7",
+		"#707eff",
+		"#45acff",
+		"#1ad9ff",
+		"#00ffd7",
 	}
 
 	var sb strings.Builder
@@ -1942,7 +2008,9 @@ func runHeadless(alias string) error {
 	var target *ScriptConfig
 	for _, s := range cfg.Scripts {
 		if s.NameAlias == alias {
-			target = &s
+
+			sc := s
+			target = &sc
 			break
 		}
 	}
@@ -1961,7 +2029,8 @@ func runHeadless(alias string) error {
 	var lastState string
 	printedOffset := 0
 
-	for {
+	deadline := time.Now().Add(30 * time.Minute)
+	for time.Now().Before(deadline) {
 		time.Sleep(100 * time.Millisecond)
 		data, err := os.ReadFile(taskFilePath)
 		if err != nil {
@@ -1990,10 +2059,11 @@ func runHeadless(alias string) error {
 			break
 		}
 	}
-
-	if cmd != nil && cmd.Process != nil {
-		_ = cmd.Wait()
+	if time.Now().After(deadline) {
+		return fmt.Errorf("timed out waiting for task '%s' to complete", alias)
 	}
+
+	_ = cmd
 
 	if !success {
 		return fmt.Errorf("task finished with state: %s", lastState)

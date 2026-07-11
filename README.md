@@ -1,6 +1,11 @@
+![Gif](assets/banner.png)
+
+
 # sctl (Script Controller) 🚀
 
 `sctl` is a modern, elegant Terminal User Interface (TUI) task automation dashboard, script runner, and cron scheduler built in Go using the **Bubble Tea** framework. It provides a visual workspace for managing, running, and scheduling tasks, scripts, and notebooks with real-time log monitoring and progress tracking.
+
+![Gif](assets/poster.png)
 
 ---
 
@@ -13,6 +18,7 @@
 - **Automated Crontab Sync**: Assign a cron schedule to any task, and `sctl` will automatically synchronize it with your user `crontab` to run headlessly.
 - **Cross-Platform Process Management**: Cleanly starts and terminates process trees. Uses Unix process groups on macOS/Linux and `taskkill` on Windows to guarantee child processes are cleaned up upon cancellation.
 - **Persistent Log Files**: Saves task results, execution statuses, and incremental log streams to structured `task_<id>.yaml` files in your configured output directories.
+- **Open HTML Output**: Automatically detects and opens the most recently generated HTML report or notebook output of a script in your default system browser (cross-platform).
 
 ---
 
@@ -108,6 +114,7 @@ sctl
 | `Enter` | Edit input environment variables for the selected script |
 | `d` / `Delete` | Remove the selected task config |
 | `p` | Toggle parallel execution mode (runs checked scripts concurrently or sequentially) |
+| `o` | Open the latest HTML report/output file in the system default web browser |
 | `[` / `]` | Scroll logs page up / page down |
 | `q` / `Ctrl+C` | Quit `sctl` (terminating all active background tasks started in this session) |
 
@@ -136,6 +143,65 @@ task:
     [15:30:00] Starting automated system health checks...
     [15:30:04] Checked system metrics. All parameters normal.
     [15:30:05] Finished successfully.
+```
+
+---
+
+## Script Progress Integration 📊
+
+`sctl` supports real-time progress bar updates in the TUI dashboard. To update the progress bar from within your custom script, simply print a line to standard output (stdout) prefixed with `__PROGRESS__:` followed by an integer from `0` to `100`.
+
+These progress lines are intercepted by `sctl` to update the UI and are automatically filtered out from your task logs.
+
+### Python Example
+```python
+import time
+import sys
+
+print("Initializing system update...")
+sys.stdout.flush()
+time.sleep(1)
+
+# Report 20% progress
+print("__PROGRESS__:20")
+sys.stdout.flush()
+
+print("Downloading dependencies...")
+time.sleep(2)
+
+# Report 60% progress
+print("__PROGRESS__:60")
+sys.stdout.flush()
+
+print("Applying changes...")
+time.sleep(2)
+
+# Report 100% progress
+print("__PROGRESS__:100")
+sys.stdout.flush()
+```
+
+### Bash Example
+```bash
+#!/bin/bash
+
+echo "Starting deployment..."
+sleep 1
+
+echo "__PROGRESS__:10"
+echo "Cleaning up temp files..."
+sleep 1
+
+echo "__PROGRESS__:50"
+echo "Copying assets..."
+sleep 2
+
+echo "__PROGRESS__:90"
+echo "Restarting services..."
+sleep 1
+
+echo "__PROGRESS__:100"
+echo "Deployment successful!"
 ```
 
 ---
