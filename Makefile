@@ -1,4 +1,4 @@
 run:
-	go build -o obsctl && ./obsctl
+	go build -o sctl && ./sctl
 install:
-	go build -o obsctl && sudo cp obsctl /usr/local/bin
+	go build -o sctl && sudo cp sctl /usr/local/bin

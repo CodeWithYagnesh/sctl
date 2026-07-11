@@ -1,17 +1,19 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"gopkg.in/yaml.v3"
 )
 
 func TestGetNextTaskID(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "obsctl_test_task_id")
+	tmpDir, err := os.MkdirTemp("", "sctl_test_task_id")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
@@ -34,7 +36,7 @@ func TestGetNextTaskID(t *testing.T) {
 }
 
 func TestWriteTaskFile(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "obsctl_test_write_task")
+	tmpDir, err := os.MkdirTemp("", "sctl_test_write_task")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
@@ -83,15 +85,15 @@ func TestWriteTaskFile(t *testing.T) {
 }
 
 func TestLoadConfigDefault(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "obsctl_test_config")
+	tmpDir, err := os.MkdirTemp("", "sctl_test_config")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
 	configFilePath := filepath.Join(tmpDir, "config.yaml")
-	os.Setenv("OBSCTL_CONFIG", configFilePath)
-	defer os.Unsetenv("OBSCTL_CONFIG")
+	os.Setenv("SCTL_CONFIG", configFilePath)
+	defer os.Unsetenv("SCTL_CONFIG")
 
 	// Verify file does not exist initially
 	if _, err := os.Stat(configFilePath); !os.IsNotExist(err) {
@@ -128,7 +130,7 @@ func TestLoadConfigDefault(t *testing.T) {
 }
 
 func TestStartTaskExecution(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "obsctl_test_execution")
+	tmpDir, err := os.MkdirTemp("", "sctl_test_execution")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
@@ -136,8 +138,8 @@ func TestStartTaskExecution(t *testing.T) {
 
 	// Command outputting logs and progress markers
 	command := `echo "starting job"; echo "__PROGRESS__:30"; echo "working hard"; echo "__PROGRESS__:80"; echo "done!"`
-	
-	_, taskID, err := StartTask("test_run", command, tmpDir)
+
+	_, taskID, err := StartTask("test_run", command, tmpDir, nil)
 	if err != nil {
 		t.Fatalf("failed to start task: %v", err)
 	}
@@ -149,7 +151,7 @@ func TestStartTaskExecution(t *testing.T) {
 	// Poll the state in the task file until complete
 	var parsed TaskYAML
 	taskFilePath := filepath.Join(tmpDir, "task_1.yaml")
-	
+
 	success := false
 	for i := 0; i < 40; i++ {
 		time.Sleep(50 * time.Millisecond)
@@ -157,7 +159,7 @@ func TestStartTaskExecution(t *testing.T) {
 		if err != nil {
 			continue
 		}
-		
+
 		var current TaskYAML
 		err = yaml.Unmarshal(data, &current)
 		if err == nil {
@@ -231,5 +233,187 @@ func TestInterpretCarriageReturns(t *testing.T) {
 		if got != tc.expected {
 			t.Errorf("InterpretCarriageReturns(%q) = %q; want %q", tc.input, got, tc.expected)
 		}
+	}
+}
+
+func TestStartTaskWithEnv(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sctl_test_env")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	command := `echo "COUNT_VAL=${count}"; echo "SOMETHING_VAL=${something_env}"`
+	input := map[string]interface{}{
+		"count":         2,
+		"something_env": "something value",
+	}
+
+	_, taskID, err := StartTask("test_run_env", command, tmpDir, input)
+	if err != nil {
+		t.Fatalf("failed to start task: %v", err)
+	}
+
+	taskFilePath := filepath.Join(tmpDir, fmt.Sprintf("task_%d.yaml", taskID))
+
+	success := false
+	var parsed TaskYAML
+	for i := 0; i < 40; i++ {
+		time.Sleep(50 * time.Millisecond)
+		data, err := os.ReadFile(taskFilePath)
+		if err != nil {
+			continue
+		}
+
+		var current TaskYAML
+		err = yaml.Unmarshal(data, &current)
+		if err == nil {
+			parsed = current
+			state := current.Task.State
+			if state == "Success" || state == "Failed" || state == "Stopped" {
+				success = true
+				break
+			}
+		}
+	}
+
+	if !success {
+		t.Fatalf("task did not complete in time, last parsed state: %s", parsed.Task.State)
+	}
+
+	if parsed.Task.State != "Success" {
+		t.Errorf("expected state 'Success', got %s", parsed.Task.State)
+	}
+
+	expectedLogs := "COUNT_VAL=2\nSOMETHING_VAL=something value"
+	if parsed.Task.Logs.Value != expectedLogs {
+		t.Errorf("expected logs %q, got %q", expectedLogs, parsed.Task.Logs.Value)
+	}
+}
+
+func TestSyncCrontab(t *testing.T) {
+	cfg := &Config{
+		Scripts: []ScriptConfig{
+			{
+				NameAlias: "cron_test_script",
+				Command:   "echo hello",
+				Cron:      "*/15 * * * *",
+			},
+		},
+	}
+
+	// Simply verify it executes without panics
+	_ = SyncCrontab(cfg)
+
+	// Clean up by passing empty config
+	_ = SyncCrontab(&Config{})
+}
+
+func TestSubmitEnvForm(t *testing.T) {
+	m := &model{
+		cursor: 0,
+		config: &Config{
+			Scripts: []ScriptConfig{
+				{
+					NameAlias: "hello",
+					Command:   "echo",
+				},
+			},
+		},
+		scripts: []ScriptState{
+			{
+				Config: ScriptConfig{
+					NameAlias: "hello",
+					Command:   "echo",
+				},
+			},
+		},
+		envInputs: make([]textinput.Model, 11),
+	}
+
+	for i := range m.envInputs {
+		m.envInputs[i] = textinput.New()
+	}
+
+	m.envInputs[0].SetValue("*/10 * * * *")
+	m.envInputs[1].SetValue("VAR_A")
+	m.envInputs[2].SetValue("val_a")
+
+	oldEnv := os.Getenv("SCTL_CONFIG")
+	defer os.Setenv("SCTL_CONFIG", oldEnv)
+
+	tmpFile, err := os.CreateTemp("", "sctl_test_config_*.yaml")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	tmpPath := tmpFile.Name()
+	tmpFile.Close()
+	defer os.Remove(tmpPath)
+	os.Setenv("SCTL_CONFIG", tmpPath)
+
+	m.submitEnvForm()
+
+	if m.config.Scripts[0].Cron != "*/10 * * * *" {
+		t.Errorf("expected Cron '*/10 * * * *', got %q", m.config.Scripts[0].Cron)
+	}
+	if m.config.Scripts[0].Input["VAR_A"] != "val_a" {
+		t.Errorf("expected Input VAR_A = 'val_a', got %q", m.config.Scripts[0].Input["VAR_A"])
+	}
+}
+
+func TestDeleteScript(t *testing.T) {
+	m := &model{
+		cursor: 1,
+		config: &Config{
+			Scripts: []ScriptConfig{
+				{
+					NameAlias: "hello_1",
+					Command:   "echo 1",
+				},
+				{
+					NameAlias: "hello_2",
+					Command:   "echo 2",
+				},
+			},
+		},
+		scripts: []ScriptState{
+			{
+				Config: ScriptConfig{
+					NameAlias: "hello_1",
+					Command:   "echo 1",
+				},
+			},
+			{
+				Config: ScriptConfig{
+					NameAlias: "hello_2",
+					Command:   "echo 2",
+				},
+			},
+		},
+	}
+
+	oldEnv := os.Getenv("SCTL_CONFIG")
+	defer os.Setenv("SCTL_CONFIG", oldEnv)
+
+	tmpFile, err := os.CreateTemp("", "sctl_test_delete_config_*.yaml")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	tmpPath := tmpFile.Name()
+	tmpFile.Close()
+	defer os.Remove(tmpPath)
+	os.Setenv("SCTL_CONFIG", tmpPath)
+
+	m.deleteSelectedScript()
+
+	// Cursor should adjust down to 0
+	if m.cursor != 0 {
+		t.Errorf("expected cursor 0 after deleting index 1, got %d", m.cursor)
+	}
+	if len(m.scripts) != 1 {
+		t.Errorf("expected scripts slice size 1, got %d", len(m.scripts))
+	}
+	if m.scripts[0].Config.NameAlias != "hello_1" {
+		t.Errorf("expected remaining script to be hello_1, got %s", m.scripts[0].Config.NameAlias)
 	}
 }

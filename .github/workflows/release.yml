@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger on version tags (e.g. v1.0.0)
+  workflow_dispatch: # Enable manual triggering of this workflow
+
+permissions:
+  contents: write # Required to create releases and upload assets
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run Go Tests
+        run: go test -v ./...
+
+  build-release:
+    name: Build & Release Binaries
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build Binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          BINARY_NAME="sctl"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            BINARY_OUT="${BINARY_NAME}.exe"
+          else
+            BINARY_OUT="${BINARY_NAME}"
+          fi
+          
+          # Build binary with optimizations (omit symbol table and debug information)
+          go build -ldflags="-s -w" -o "dist/${BINARY_OUT}" .
+
+      - name: Package Release Asset
+        id: package
+        run: |
+          BINARY_NAME="sctl"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            BINARY_OUT="${BINARY_NAME}.exe"
+            ARCHIVE_NAME="${BINARY_NAME}-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.zip"
+            cd dist && zip "../${ARCHIVE_NAME}" "${BINARY_OUT}" && cd ..
+          else
+            BINARY_OUT="${BINARY_NAME}"
+            ARCHIVE_NAME="${BINARY_NAME}-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz"
+            cd dist && tar -czf "../${ARCHIVE_NAME}" "${BINARY_OUT}" && cd ..
+          fi
+          echo "archive_name=${ARCHIVE_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.archive_name }}
+          path: ${{ steps.package.outputs.archive_name }}
+          retention-days: 1
+
+  create-release:
+    name: Create GitHub Release
+    needs: build-release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: dist
+
+      - name: Generate Checksums
+        run: |
+          cd dist
+          sha256sum * > ../checksums.txt
+          cd ..
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*
+            checksums.txt
+          draft: false
+          prerelease: false
+          generate_release_notes: true

@@ -35,10 +35,12 @@ const (
 // --- CONFIGURATION ---
 
 type ScriptConfig struct {
-	NameAlias        string `yaml:"name_alias"`
-	Description      string `yaml:"description"`
-	Command          string `yaml:"command"`
-	OutputFolderPath string `yaml:"output_folder_path"`
+	NameAlias        string                 `yaml:"name_alias"`
+	Description      string                 `yaml:"description"`
+	Command          string                 `yaml:"command"`
+	OutputFolderPath string                 `yaml:"output_folder_path"`
+	Input            map[string]interface{} `yaml:"input,omitempty"`
+	Cron             string                 `yaml:"cron,omitempty"`
 }
 
 type Config struct {
@@ -46,7 +48,7 @@ type Config struct {
 }
 
 func GetConfigPath() string {
-	path := os.Getenv("OBSCTL_CONFIG")
+	path := os.Getenv("SCTL_CONFIG")
 	if path == "" {
 		path = "config.yaml"
 	}
@@ -88,6 +90,7 @@ func LoadConfig() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	_ = SyncCrontab(&cfg)
 	return &cfg, nil
 }
 
@@ -103,7 +106,86 @@ func SaveConfig(cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return err
+	}
+	_ = SyncCrontab(cfg)
+	return nil
+}
+
+func SyncCrontab(cfg *Config) error {
+	executable, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	executable, err = filepath.Abs(executable)
+	if err != nil {
+		return err
+	}
+
+	cmd := exec.Command("crontab", "-l")
+	var existingLines []string
+	out, err := cmd.Output()
+	if err == nil {
+		rawLines := strings.Split(string(out), "\n")
+		for _, line := range rawLines {
+			existingLines = append(existingLines, strings.TrimRight(line, "\r\n"))
+		}
+		if len(existingLines) > 0 && existingLines[len(existingLines)-1] == "" {
+			existingLines = existingLines[:len(existingLines)-1]
+		}
+	}
+
+	var newLines []string
+	skipNext := false
+	for _, line := range existingLines {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		if strings.HasPrefix(line, "# SCTL SCHEDULED JOB: ") {
+			skipNext = true
+			continue
+		}
+		newLines = append(newLines, line)
+	}
+
+	for _, script := range cfg.Scripts {
+		cronExpr := strings.TrimSpace(script.Cron)
+		if cronExpr != "" {
+			newLines = append(newLines, fmt.Sprintf("# SCTL SCHEDULED JOB: %s", script.NameAlias))
+			newLines = append(newLines, fmt.Sprintf("%s %s --run %q >/dev/null 2>&1", cronExpr, executable, script.NameAlias))
+		}
+	}
+
+	if len(newLines) == 0 {
+		rmCmd := exec.Command("crontab", "-r")
+		_ = rmCmd.Run()
+		return nil
+	}
+
+	tmpFile, err := os.CreateTemp("", "sctl_cron")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	writer := bufio.NewWriter(tmpFile)
+	for _, line := range newLines {
+		if _, err := writer.WriteString(line + "\n"); err != nil {
+			return err
+		}
+	}
+	if err := writer.Flush(); err != nil {
+		return err
+	}
+	if err := tmpFile.Close(); err != nil {
+		return err
+	}
+
+	installCmd := exec.Command("crontab", tmpFile.Name())
+	return installCmd.Run()
 }
 
 // --- TASK ENGINE ---
@@ -176,10 +258,14 @@ func writeTaskFile(folderPath string, taskID int, nameAlias string, state string
 	return os.WriteFile(filename, data, 0644)
 }
 
-func StartTask(nameAlias string, command string, folderPath string) (*exec.Cmd, int, error) {
+func StartTask(nameAlias string, command string, folderPath string, input map[string]interface{}) (*exec.Cmd, int, error) {
 	taskID := getNextTaskID(folderPath)
 	cmd := exec.Command("bash", "-c", command)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Env = os.Environ()
+	for k, v := range input {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%v", k, v))
+	}
 
 	r, w := io.Pipe()
 	cmd.Stdout = w
@@ -345,21 +431,24 @@ type ScriptState struct {
 }
 
 type model struct {
-	config        *Config
-	scripts       []ScriptState
-	cursor        int
-	activePanel   activePanel
-	parallelMode  bool
-	viewport      viewport.Model
-	width         int
-	height        int
-	runQueue      []int
-	runningIndex  int
-	activeView    string
-	formInputs    []textinput.Model
-	focusedInput  int
-	statusMsg     string
-	statusMsgTime time.Time
+	config               *Config
+	scripts              []ScriptState
+	cursor               int
+	activePanel          activePanel
+	parallelMode         bool
+	viewport             viewport.Model
+	width                int
+	height               int
+	runQueue             []int
+	runningIndex         int
+	activeView           string
+	formInputs           []textinput.Model
+	focusedInput         int
+	envInputs            []textinput.Model
+	focusedEnv           int
+	confirmDeleteFocused int
+	statusMsg            string
+	statusMsgTime        time.Time
 }
 
 type TaskStartedMsg struct {
@@ -435,7 +524,7 @@ func initialModel() *model {
 		}
 	}
 
-	inputs := make([]textinput.Model, 4)
+	inputs := make([]textinput.Model, 5)
 	for i := range inputs {
 		t := textinput.New()
 		t.CharLimit = 100
@@ -449,6 +538,8 @@ func initialModel() *model {
 			t.Placeholder = "e.g., python scripts/replicate.py"
 		case 3:
 			t.Placeholder = "e.g., ./output/data_replication"
+		case 4:
+			t.Placeholder = "e.g., */5 * * * * (optional)"
 		}
 		inputs[i] = t
 	}
@@ -465,7 +556,7 @@ func initialModel() *model {
 		activeView:   "main",
 		formInputs:   inputs,
 		focusedInput: 0,
-		statusMsg:    "Welcome to obsctl! Select a script and press 'R' to run.",
+		statusMsg:    "Welcome to sctl! Select a script and press 'R' to run.",
 	}
 }
 
@@ -593,6 +684,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateForm(msg)
 		}
 
+		if m.activeView == "env_form" {
+			return m.updateEnvForm(msg)
+		}
+
+		if m.activeView == "delete_confirm" {
+			return m.updateDeleteConfirm(msg)
+		}
+
 		switch key {
 		case "q":
 			for i := range m.scripts {
@@ -620,6 +719,19 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.formInputs[i].SetValue("")
 			}
 			m.formInputs[0].Focus()
+			return m, nil
+		case "enter":
+			if len(m.scripts) > 0 {
+				m.activeView = "env_form"
+				m.focusedEnv = 0
+				m.initEnvForm()
+			}
+			return m, nil
+		case "d", "delete":
+			if len(m.scripts) > 0 {
+				m.activeView = "delete_confirm"
+				m.confirmDeleteFocused = 0
+			}
 			return m, nil
 		case "o":
 			m.openHTMLOutput()
@@ -673,12 +785,12 @@ func (m *model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.activeView = "main"
 		return m, nil
 	case "tab", "down":
-		if m.focusedInput < 5 {
-			if m.focusedInput < 4 {
+		if m.focusedInput < 6 {
+			if m.focusedInput < 5 {
 				m.formInputs[m.focusedInput].Blur()
 			}
 			m.focusedInput++
-			if m.focusedInput < 4 {
+			if m.focusedInput < 5 {
 				m.formInputs[m.focusedInput].Focus()
 			}
 		} else {
@@ -688,33 +800,35 @@ func (m *model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "shift+tab", "up":
 		if m.focusedInput > 0 {
-			if m.focusedInput < 4 {
+			if m.focusedInput < 5 {
 				m.formInputs[m.focusedInput].Blur()
 			}
 			m.focusedInput--
-			if m.focusedInput < 4 {
+			if m.focusedInput < 5 {
 				m.formInputs[m.focusedInput].Focus()
 			}
 		} else {
-			m.formInputs[0].Blur()
-			m.focusedInput = 5
+			if m.focusedInput < 5 {
+				m.formInputs[m.focusedInput].Blur()
+			}
+			m.focusedInput = 6
 		}
 		return m, nil
 	case "enter":
-		if m.focusedInput == 4 {
+		if m.focusedInput == 5 {
 			m.submitForm()
-		} else if m.focusedInput == 5 {
+		} else if m.focusedInput == 6 {
 			m.activeView = "main"
 		} else {
 			m.formInputs[m.focusedInput].Blur()
 			m.focusedInput++
-			if m.focusedInput < 4 {
+			if m.focusedInput < 5 {
 				m.formInputs[m.focusedInput].Focus()
 			}
 		}
 		return m, nil
 	}
-	if m.focusedInput < 4 {
+	if m.focusedInput < 5 {
 		var cmd tea.Cmd
 		m.formInputs[m.focusedInput], cmd = m.formInputs[m.focusedInput].Update(msg)
 		return m, cmd
@@ -727,9 +841,15 @@ func (m *model) submitForm() {
 	desc := strings.TrimSpace(m.formInputs[1].Value())
 	cmdStr := strings.TrimSpace(m.formInputs[2].Value())
 	outputPath := strings.TrimSpace(m.formInputs[3].Value())
+	cronStr := strings.TrimSpace(m.formInputs[4].Value())
 
 	if alias == "" || cmdStr == "" || outputPath == "" {
 		m.statusMsg = "Error: Name, Command, and Output Path are required."
+		m.statusMsgTime = time.Now()
+		return
+	}
+	if cronStr != "" && !isValidCron(cronStr) {
+		m.statusMsg = "Error: Invalid cron format. Expected 5 space-separated fields."
 		m.statusMsgTime = time.Now()
 		return
 	}
@@ -746,6 +866,7 @@ func (m *model) submitForm() {
 		Description:      desc,
 		Command:          cmdStr,
 		OutputFolderPath: outputPath,
+		Cron:             cronStr,
 	}
 
 	m.config.Scripts = append(m.config.Scripts, newConfig)
@@ -765,6 +886,203 @@ func (m *model) submitForm() {
 		Checked:  false,
 	})
 	m.activeView = "main"
+}
+
+func (m *model) updateEnvForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	switch key {
+	case "esc":
+		m.activeView = "main"
+		return m, nil
+	case "tab", "down":
+		if m.focusedEnv < 12 {
+			if m.focusedEnv < 11 {
+				m.envInputs[m.focusedEnv].Blur()
+			}
+			m.focusedEnv++
+			if m.focusedEnv < 11 {
+				m.envInputs[m.focusedEnv].Focus()
+			}
+		} else {
+			m.focusedEnv = 0
+			m.envInputs[0].Focus()
+		}
+		return m, nil
+	case "shift+tab", "up":
+		if m.focusedEnv > 0 {
+			if m.focusedEnv < 11 {
+				m.envInputs[m.focusedEnv].Blur()
+			}
+			m.focusedEnv--
+			if m.focusedEnv < 11 {
+				m.envInputs[m.focusedEnv].Focus()
+			}
+		} else {
+			if m.focusedEnv < 11 {
+				m.envInputs[m.focusedEnv].Blur()
+			}
+			m.focusedEnv = 12
+		}
+		return m, nil
+	case "enter":
+		if m.focusedEnv == 11 {
+			m.submitEnvForm()
+		} else if m.focusedEnv == 12 {
+			m.activeView = "main"
+		} else {
+			m.envInputs[m.focusedEnv].Blur()
+			m.focusedEnv++
+			if m.focusedEnv < 11 {
+				m.envInputs[m.focusedEnv].Focus()
+			}
+		}
+		return m, nil
+	}
+	if m.focusedEnv < 11 {
+		var cmd tea.Cmd
+		m.envInputs[m.focusedEnv], cmd = m.envInputs[m.focusedEnv].Update(msg)
+		return m, cmd
+	}
+	return m, nil
+}
+
+func (m *model) updateDeleteConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	switch key {
+	case "esc":
+		m.activeView = "main"
+		return m, nil
+	case "left", "right", "tab", "shift+tab":
+		if m.confirmDeleteFocused == 0 {
+			m.confirmDeleteFocused = 1
+		} else {
+			m.confirmDeleteFocused = 0
+		}
+		return m, nil
+	case "enter":
+		if m.confirmDeleteFocused == 1 {
+			m.deleteSelectedScript()
+		} else {
+			m.activeView = "main"
+		}
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m *model) initEnvForm() {
+	m.envInputs = make([]textinput.Model, 11)
+	for i := range m.envInputs {
+		m.envInputs[i] = textinput.New()
+		m.envInputs[i].CharLimit = 100
+		m.envInputs[i].Width = 40
+	}
+	m.envInputs[0].Placeholder = "e.g., */5 * * * *"
+
+	focusedScript := m.scripts[m.cursor]
+	m.envInputs[0].SetValue(focusedScript.Config.Cron)
+
+	keys := make([]string, 0, len(focusedScript.Config.Input))
+	for k := range focusedScript.Config.Input {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	idx := 1
+	for _, k := range keys {
+		if idx >= 11 {
+			break
+		}
+		m.envInputs[idx].SetValue(k)
+		m.envInputs[idx+1].SetValue(fmt.Sprintf("%v", focusedScript.Config.Input[k]))
+		idx += 2
+	}
+	for i := 1; i < 11; i += 2 {
+		m.envInputs[i].Placeholder = fmt.Sprintf("Key %d", (i/2)+1)
+		m.envInputs[i+1].Placeholder = fmt.Sprintf("Value %d", (i/2)+1)
+	}
+
+	m.envInputs[0].Focus()
+}
+
+func (m *model) submitEnvForm() {
+	focusedScript := &m.scripts[m.cursor]
+	cronVal := strings.TrimSpace(m.envInputs[0].Value())
+	focusedScript.Config.Cron = cronVal
+
+	inputsMap := make(map[string]interface{})
+	for i := 1; i < 11; i += 2 {
+		k := strings.TrimSpace(m.envInputs[i].Value())
+		v := strings.TrimSpace(m.envInputs[i+1].Value())
+		if k != "" {
+			inputsMap[k] = v
+		}
+	}
+	focusedScript.Config.Input = inputsMap
+
+	if cronVal != "" && !isValidCron(cronVal) {
+		m.statusMsg = "Error: Invalid cron format. Expected 5 space-separated fields."
+		m.statusMsgTime = time.Now()
+		return
+	}
+
+	m.config.Scripts[m.cursor] = focusedScript.Config
+	err := SaveConfig(m.config)
+	if err != nil {
+		m.statusMsg = fmt.Sprintf("Error saving config: %v", err)
+	} else {
+		m.statusMsg = "Configuration updated successfully."
+	}
+	m.statusMsgTime = time.Now()
+	m.activeView = "main"
+}
+
+func isValidCron(cronStr string) bool {
+	if cronStr == "" {
+		return true
+	}
+	parts := strings.Fields(cronStr)
+	if len(parts) != 5 {
+		return false
+	}
+	for _, p := range parts {
+		for _, r := range p {
+			if !((r >= '0' && r <= '9') || r == '*' || r == '/' || r == '-' || r == ',' || r == '?') {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (m *model) deleteSelectedScript() {
+	if len(m.scripts) == 0 {
+		m.activeView = "main"
+		return
+	}
+	idx := m.cursor
+	script := m.scripts[idx]
+
+	if script.Cmd != nil {
+		_ = StopTask(script.Cmd)
+	}
+
+	m.config.Scripts = append(m.config.Scripts[:idx], m.config.Scripts[idx+1:]...)
+	_ = SaveConfig(m.config)
+
+	m.scripts = append(m.scripts[:idx], m.scripts[idx+1:]...)
+
+	if m.cursor >= len(m.scripts) {
+		m.cursor = len(m.scripts) - 1
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
+
+	m.activeView = "main"
+	m.statusMsg = fmt.Sprintf("Successfully deleted script '%s'.", script.Config.NameAlias)
+	m.statusMsgTime = time.Now()
+	m.updateViewport()
 }
 
 func InterpretCarriageReturns(s string) string {
@@ -819,7 +1137,7 @@ func (m *model) updateViewport() {
 func (m *model) runTaskCmd(idx int) tea.Cmd {
 	return func() tea.Msg {
 		script := m.scripts[idx]
-		cmd, taskID, err := StartTask(script.Config.NameAlias, script.Config.Command, script.Config.OutputFolderPath)
+		cmd, taskID, err := StartTask(script.Config.NameAlias, script.Config.Command, script.Config.OutputFolderPath, script.Config.Input)
 		if err != nil {
 			return TaskStartErrorMsg{ScriptNameAlias: script.Config.NameAlias, Error: err}
 		}
@@ -1072,7 +1390,7 @@ func (m *model) renderLeftPanel(width, height int) string {
 			descStr = descStr[:descWidth-3] + "..."
 		}
 		descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Width(descWidth).MaxHeight(1)
-		
+
 		line2 := fmt.Sprintf("  %s  %s", pBar, descStyle.Render(descStr))
 
 		cardContent := line1Final + "\n" + line2
@@ -1153,14 +1471,16 @@ func (m *model) renderBottomBar(width int) string {
 	}
 
 	border := lipgloss.NewStyle().Foreground(lipgloss.Color("#2c2c2c")).Render(strings.Repeat("─", width))
-	
+
 	keyStyle := lipgloss.NewStyle().Background(lipgloss.Color("#3c3836")).Foreground(lipgloss.Color("#ffffff")).Bold(true).Padding(0, 1)
 	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#a6adc8")).Padding(0, 1)
-	
+
 	items := []string{
 		keyStyle.Render("R") + descStyle.Render("Run"),
 		keyStyle.Render("S") + descStyle.Render("Stop"),
 		keyStyle.Render("A") + descStyle.Render("Add"),
+		keyStyle.Render("Enter") + descStyle.Render("Edit"),
+		keyStyle.Render("D/Del") + descStyle.Render("Delete"),
 		keyStyle.Render("P") + descStyle.Render("Parallel"),
 		keyStyle.Render("O") + descStyle.Render("Open HTML"),
 		keyStyle.Render("Tab") + descStyle.Render("Switch"),
@@ -1172,55 +1492,46 @@ func (m *model) renderBottomBar(width int) string {
 	return border + "\n" + firstLine + "\n" + legend
 }
 
-func (m *model) renderForm() string {
+func (m *model) renderFramedBox(titleText string, titleColor string, borderColor string, innerContent []string, boxWidth int) string {
+	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(borderColor))
+
+	titleLen := len(titleText)
+	dashesCount := boxWidth - 3 - titleLen
+	if dashesCount < 1 {
+		dashesCount = 1
+	}
+
+	topBorder := "┌─"
+	if titleText != "" {
+		topBorder += lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(titleColor)).Render(titleText)
+	}
+	topBorder += strings.Repeat("─", dashesCount) + "┐"
+
 	var s strings.Builder
-	s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ff007f")).Render(" ┌─ Add New Script ───────────────────────────────────────┐ ") + "\n")
-	s.WriteString(" │                                                         │ \n")
+	s.WriteString(borderStyle.Render(topBorder) + "\n")
 
-	for i, input := range m.formInputs {
-		label := ""
-		switch i {
-		case 0:
-			label = "  Script Name Alias (uniquely identifies the script):"
-		case 1:
-			label = "  Description:"
-		case 2:
-			label = "  Command (shell command to run):"
-		case 3:
-			label = "  Output Folder Path:"
-		}
-		s.WriteString(fmt.Sprintf(" │ %s\n", lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render(label)))
-
-		inputStr := input.View()
-		if i == m.focusedInput {
-			s.WriteString(fmt.Sprintf(" │ %s\n", lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#00ffd7")).Width(50).Render(inputStr)))
+	contentWidth := boxWidth - 4 // border + spacing
+	for _, line := range innerContent {
+		w := lipgloss.Width(line)
+		var paddedLine string
+		if w < contentWidth {
+			paddedLine = "  " + line + strings.Repeat(" ", contentWidth-w) + "  "
 		} else {
-			s.WriteString(fmt.Sprintf(" │ %s\n", lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#3e3d32")).Width(50).Render(inputStr)))
+			paddedLine = "  " + line + "  "
 		}
-		s.WriteString(" │                                                         │ \n")
+		s.WriteString(borderStyle.Render("│") + paddedLine + borderStyle.Render("│") + "\n")
 	}
 
-	saveBtn := " [ Save ] "
-	cancelBtn := " [ Cancel ] "
-	if m.focusedInput == 4 {
-		saveBtn = lipgloss.NewStyle().Background(lipgloss.Color("#00ffd7")).Foreground(lipgloss.Color("#000000")).Bold(true).Render(" [ Save ] ")
-	} else if m.focusedInput == 5 {
-		cancelBtn = lipgloss.NewStyle().Background(lipgloss.Color("#ff007f")).Foreground(lipgloss.Color("#000000")).Bold(true).Render(" [ Cancel ] ")
-	}
+	bottomBorder := "└" + strings.Repeat("─", boxWidth-2) + "┘"
+	s.WriteString(borderStyle.Render(bottomBorder) + "\n")
 
-	s.WriteString(fmt.Sprintf(" │              %s     %s              │ \n", saveBtn, cancelBtn))
-	s.WriteString(" │                                                         │ \n")
-	s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ff007f")).Render(" └────────────────────────────────────────────────────────┘ ") + "\n")
-
-	formStr := s.String()
-	formHeight := strings.Count(formStr, "\n")
-	formWidth := 60
-
-	padTop := (m.height - formHeight) / 2
+	boxStr := s.String()
+	boxHeight := strings.Count(boxStr, "\n")
+	padTop := (m.height - boxHeight) / 2
 	if padTop < 0 {
 		padTop = 0
 	}
-	padLeft := (m.width - formWidth) / 2
+	padLeft := (m.width - boxWidth) / 2
 	if padLeft < 0 {
 		padLeft = 0
 	}
@@ -1229,23 +1540,178 @@ func (m *model) renderForm() string {
 	for i := 0; i < padTop; i++ {
 		output.WriteString("\n")
 	}
-	for _, line := range strings.Split(formStr, "\n") {
+	for _, line := range strings.Split(boxStr, "\n") {
+		if line == "" {
+			continue
+		}
 		output.WriteString(strings.Repeat(" ", padLeft) + line + "\n")
 	}
 	return output.String()
 }
 
+func (m *model) renderForm() string {
+	var inner []string
+	inner = append(inner, "")
+
+	for i, input := range m.formInputs {
+		label := ""
+		switch i {
+		case 0:
+			label = "Script Name Alias (uniquely identifies the script):"
+		case 1:
+			label = "Description:"
+		case 2:
+			label = "Command (shell command to run):"
+		case 3:
+			label = "Output Folder Path:"
+		case 4:
+			label = "Cron Expression (e.g., */5 * * * * - optional):"
+		}
+		inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render(label))
+
+		inputStr := input.View()
+		var styledInput string
+		if i == m.focusedInput {
+			styledInput = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(lipgloss.Color("#00ffd7")).
+				Width(50).
+				Render(inputStr)
+		} else {
+			styledInput = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(lipgloss.Color("#3e3d32")).
+				Width(50).
+				Render(inputStr)
+		}
+		inputLines := strings.Split(styledInput, "\n")
+		for _, line := range inputLines {
+			if line != "" {
+				inner = append(inner, line)
+			}
+		}
+		inner = append(inner, "")
+	}
+
+	saveBtn := " [ Save ] "
+	cancelBtn := " [ Cancel ] "
+	if m.focusedInput == 5 {
+		saveBtn = lipgloss.NewStyle().Background(lipgloss.Color("#00ffd7")).Foreground(lipgloss.Color("#000000")).Bold(true).Render(" [ Save ] ")
+	} else if m.focusedInput == 6 {
+		cancelBtn = lipgloss.NewStyle().Background(lipgloss.Color("#ff007f")).Foreground(lipgloss.Color("#000000")).Bold(true).Render(" [ Cancel ] ")
+	}
+
+	inner = append(inner, fmt.Sprintf("             %s     %s", saveBtn, cancelBtn))
+	inner = append(inner, "")
+
+	return m.renderFramedBox(" Add New Script ", "#ff007f", "#ff007f", inner, 60)
+}
+
+func (m *model) renderEnvForm() string {
+	var inner []string
+	inner = append(inner, "")
+
+	focusedScript := m.scripts[m.cursor]
+	titleLabel := fmt.Sprintf("Editing Config for: %s", focusedScript.Config.NameAlias)
+	inner = append(inner, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00ffd7")).Render(titleLabel))
+	inner = append(inner, "")
+
+	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render("Cron Expression (e.g., */5 * * * *):"))
+	cronStr := m.envInputs[0].View()
+	var styledCron string
+	if m.focusedEnv == 0 {
+		styledCron = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#00ffd7")).Width(50).Render(cronStr)
+	} else {
+		styledCron = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#3e3d32")).Width(50).Render(cronStr)
+	}
+	for _, line := range strings.Split(styledCron, "\n") {
+		if line != "" {
+			inner = append(inner, line)
+		}
+	}
+	inner = append(inner, "")
+
+	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render("Environment Variables (up to 5 key-value pairs):"))
+
+	for i := 1; i < 11; i += 2 {
+		keyInput := m.envInputs[i].View()
+		valInput := m.envInputs[i+1].View()
+
+		var styledKey, styledVal string
+		if m.focusedEnv == i {
+			styledKey = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#00ffd7")).Width(22).Render(keyInput)
+		} else {
+			styledKey = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#3e3d32")).Width(22).Render(keyInput)
+		}
+
+		if m.focusedEnv == i+1 {
+			styledVal = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#00ffd7")).Width(22).Render(valInput)
+		} else {
+			styledVal = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#3e3d32")).Width(22).Render(valInput)
+		}
+
+		keyLines := strings.Split(styledKey, "\n")
+		valLines := strings.Split(styledVal, "\n")
+
+		for j := 0; j < len(keyLines); j++ {
+			if j < len(valLines) && keyLines[j] != "" && valLines[j] != "" {
+				inner = append(inner, fmt.Sprintf("%s   %s", keyLines[j], valLines[j]))
+			}
+		}
+	}
+	inner = append(inner, "")
+
+	saveBtn := " [ Save ] "
+	cancelBtn := " [ Cancel ] "
+	if m.focusedEnv == 11 {
+		saveBtn = lipgloss.NewStyle().Background(lipgloss.Color("#00ffd7")).Foreground(lipgloss.Color("#000000")).Bold(true).Render(" [ Save ] ")
+	} else if m.focusedEnv == 12 {
+		cancelBtn = lipgloss.NewStyle().Background(lipgloss.Color("#ff007f")).Foreground(lipgloss.Color("#000000")).Bold(true).Render(" [ Cancel ] ")
+	}
+
+	inner = append(inner, fmt.Sprintf("             %s     %s", saveBtn, cancelBtn))
+	inner = append(inner, "")
+
+	return m.renderFramedBox(" Edit Script Environment & Schedule ", "#00ffd7", "#00ffd7", inner, 60)
+}
+
+func (m *model) renderDeleteConfirm() string {
+	var inner []string
+	inner = append(inner, "")
+
+	focusedScript := m.scripts[m.cursor]
+	warningMsg := fmt.Sprintf("Are you sure you want to delete script '%s'?", focusedScript.Config.NameAlias)
+	inner = append(inner, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ff007f")).Render(warningMsg))
+	inner = append(inner, "")
+	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render("This action cannot be undone and will update crontab."))
+	inner = append(inner, "")
+
+	cancelBtn := " [ Cancel ] "
+	deleteBtn := " [ Delete ] "
+	if m.confirmDeleteFocused == 0 {
+		cancelBtn = lipgloss.NewStyle().Background(lipgloss.Color("#75715e")).Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(" [ Cancel ] ")
+	} else if m.confirmDeleteFocused == 1 {
+		deleteBtn = lipgloss.NewStyle().Background(lipgloss.Color("#f92672")).Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(" [ Delete ] ")
+	}
+
+	inner = append(inner, fmt.Sprintf("         %s         %s", cancelBtn, deleteBtn))
+	inner = append(inner, "")
+
+	return m.renderFramedBox(" Delete Confirmation ", "#f92672", "#f92672", inner, 50)
+}
+
 func getLargeLogo() string {
 	logoLines := []string{
-		"  ▒█████   ▄▄▄▄    ██████  ▄████▄  ▄▄▄█████▓ ██▓     ",
-		" ▒██▒  ██▒▓█████▄ ▒██    ▒ ▒██▀ ▀█  ▓  ██▒ ▓▒▓██▒     ",
-		" ▒██░  ██▒▒██▒ ▄██░ ▓██▄   ▒▓█    ▄ ▒ ▓██░ ░▒▒██░     ",
-		" ▒██   ██░▒██░█▀    ▒   ██▒▒▓▓▄ ▄██▒░ ▓██▓ ░ ▒██░     ",
-		" ░ ████▓▒░░▓█  ▀█▓▒██████▒▒▒ ▓███▀ ░  ▒██▒ ░ ░██████▒ ",
-		" ░ ▒░▒░▒░ ░▒▓███▀▒▒ ▒▓▒ ▒ ░░ ░▒ ▒  ░  ▒ ░░   ░ ▒░▓  ░ ",
-		"   ░ ▒ ▒░  ▒░▒   ░░ ░▒  ░ ░  ░  ▒       ░    ░ ░ ▒  ░ ",
-		" ░ ░ ░ ▒    ░    ░░  ░  ░  ░          ░        ░ ░    ",
-		"     ░ ░    ░           ░  ░ ░                   ░  ░ ",
+		"  ██████  ▄████▄  ▄▄▄█████▓ ██▓    ",
+		"▒██    ▒ ▒██▀ ▀█  ▓  ██▒ ▓▒▓██▒    ",
+		"░ ▓██▄   ▒▓█    ▄ ▒ ▓██░ ▒░▒██░    ",
+		"  ▒   ██▒▒▓▓▄ ▄██▒░ ▓██▓ ░ ▒██░    ",
+		"▒██████▒▒▒ ▓███▀ ░  ▒██▒ ░ ░██████▒",
+		"▒ ▒▓▒ ▒ ░░ ░▒ ▒  ░  ▒ ░░   ░ ▒░▓  ░",
+		"░ ░▒  ░ ░  ░  ▒       ░    ░ ░ ▒  ░",
+		"░  ░  ░  ░          ░        ░ ░   ",
+		"      ░  ░ ░                   ░  ░",
+		"         ░                         ",
 	}
 	colors := []string{
 		"#ff007f", // Neon Pink
@@ -1257,11 +1723,12 @@ func getLargeLogo() string {
 		"#707eff", // Blue-Purple
 		"#45acff", // Blue
 		"#1ad9ff", // Cyan
+		"#00ffd7", // Neon Teal
 	}
 
 	var sb strings.Builder
 	for i, line := range logoLines {
-		style := lipgloss.NewStyle().Foreground(lipgloss.Color(colors[i]))
+		style := lipgloss.NewStyle().Foreground(lipgloss.Color(colors[i%len(colors)]))
 		sb.WriteString(style.Render(line) + "\n")
 	}
 	return sb.String()
@@ -1291,11 +1758,11 @@ func (m *model) renderStats(width, height int) string {
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00ffd7"))
 	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#a6adc8"))
 	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#cdd6f4")).Bold(true)
-	
+
 	runBadge := badgeRunning.Render(fmt.Sprintf("%d RUNNING", runningCount))
 	successBadge := badgeSuccess.Render(fmt.Sprintf("%d OK", successCount))
 	failBadge := badgeFailed.Render(fmt.Sprintf("%d FAIL", failedCount))
-	
+
 	var modeStr string
 	if m.parallelMode {
 		modeStr = lipgloss.NewStyle().Foreground(lipgloss.Color("#ae81ff")).Bold(true).Render("PARALLEL")
@@ -1315,7 +1782,7 @@ func (m *model) renderStats(width, height int) string {
 			"  %s %s\n"+
 			"  %s %s %s\n"+
 			"  %s %s",
-		headerStyle.Render("📊 OBSERVABILITY DASHBOARD"),
+		headerStyle.Render("📊 SCRIPT DASHBOARD"),
 		labelStyle.Render("Mode:   "), modeStr,
 		labelStyle.Render("Config: "), valueStyle.Render(configPath),
 		labelStyle.Render("Scripts:"), valueStyle.Render(fmt.Sprintf("%d loaded", len(m.scripts))),
@@ -1360,7 +1827,7 @@ func (m *model) renderMediumHeader(width int) string {
 
 	info := fmt.Sprintf(
 		"⚡ %s  |  Mode: %s  |  %s",
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#a6adc8")).Render("OBSERVABILITY RUNNER"),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#a6adc8")).Render("SCRIPT RUNNER"),
 		modeStr,
 		activeStr,
 	)
@@ -1371,14 +1838,14 @@ func (m *model) renderMediumHeader(width int) string {
 	}
 
 	rightSide := strings.Repeat(" ", spaces) + info
-	
+
 	logoLines := strings.Split(logo, "\n")
-	
+
 	headerLine1 := logoLines[0] + rightSide
 	headerLine2 := logoLines[1] + strings.Repeat(" ", spaces) + lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render("Config: "+GetConfigPath())
-	
+
 	border := lipgloss.NewStyle().Foreground(lipgloss.Color("#2c2c2c")).Render(strings.Repeat("━", width))
-	
+
 	return "\n  " + headerLine1 + "\n  " + headerLine2 + "\n" + border
 }
 
@@ -1396,7 +1863,7 @@ func (m *model) renderCompactHeader(width int) string {
 	metaStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#75715e"))
 
-	leftText := titleStyle.Render("⚡ OBSCTL") + " " + subtitleStyle.Render("OBS RUNNER")
+	leftText := titleStyle.Render("⚡ SCTL") + " " + subtitleStyle.Render("SCRIPT RUNNER")
 
 	runningCount := 0
 	for _, s := range m.scripts {
@@ -1433,7 +1900,7 @@ func (m *model) renderHeader(width int) string {
 	if m.height >= 32 && m.width >= 105 {
 		logo := getLargeLogo()
 		stats := m.renderStats(45, 9)
-		
+
 		combined := lipgloss.JoinHorizontal(lipgloss.Top, logo, "      ", stats)
 		border := lipgloss.NewStyle().Foreground(lipgloss.Color("#2c2c2c")).Render(strings.Repeat("━", width))
 		return "\n" + combined + "\n" + border
@@ -1451,12 +1918,18 @@ func (m *model) View() string {
 	if m.activeView == "form" {
 		return m.renderForm()
 	}
+	if m.activeView == "env_form" {
+		return m.renderEnvForm()
+	}
+	if m.activeView == "delete_confirm" {
+		return m.renderDeleteConfirm()
+	}
 
 	header := m.renderHeader(m.width)
 
 	leftWidth := int(float64(m.width) * 0.4)
 	rightWidth := m.width - leftWidth
-	
+
 	headerHeight := m.getHeaderHeight()
 	panelHeight := m.height - (headerHeight + 4)
 
@@ -1468,7 +1941,84 @@ func (m *model) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, header, panels, bottomBar)
 }
 
+func runHeadless(alias string) error {
+	cfg, err := LoadConfig()
+	if err != nil {
+		return fmt.Errorf("error loading config: %v", err)
+	}
+
+	var target *ScriptConfig
+	for _, s := range cfg.Scripts {
+		if s.NameAlias == alias {
+			target = &s
+			break
+		}
+	}
+	if target == nil {
+		return fmt.Errorf("script alias %q not found", alias)
+	}
+
+	cmd, taskID, err := StartTask(target.NameAlias, target.Command, target.OutputFolderPath, target.Input)
+	if err != nil {
+		return fmt.Errorf("failed to start task: %v", err)
+	}
+
+	taskFilePath := filepath.Join(target.OutputFolderPath, fmt.Sprintf("task_%d.yaml", taskID))
+
+	success := false
+	var lastState string
+	printedOffset := 0
+
+	for {
+		time.Sleep(100 * time.Millisecond)
+		data, err := os.ReadFile(taskFilePath)
+		if err != nil {
+			continue
+		}
+
+		var current TaskYAML
+		err = yaml.Unmarshal(data, &current)
+		if err != nil {
+			continue
+		}
+
+		lastState = current.Task.State
+
+		logsVal := current.Task.Logs.Value
+		if len(logsVal) > printedOffset {
+			fmt.Print(logsVal[printedOffset:])
+			printedOffset = len(logsVal)
+		}
+
+		if lastState == "Success" {
+			success = true
+			break
+		}
+		if lastState == "Failed" || lastState == "Stopped" {
+			break
+		}
+	}
+
+	if cmd != nil && cmd.Process != nil {
+		_ = cmd.Wait()
+	}
+
+	if !success {
+		return fmt.Errorf("task finished with state: %s", lastState)
+	}
+	return nil
+}
+
 func main() {
+	if len(os.Args) >= 3 && (os.Args[1] == "--run" || os.Args[1] == "-run") {
+		alias := os.Args[2]
+		if err := runHeadless(alias); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
 	program = p
 	if _, err := p.Run(); err != nil {
