@@ -1,4 +1,4 @@
-module sctl
+module github.com/CodeWithYagnesh/sctl
 
 go 1.24.2
 
