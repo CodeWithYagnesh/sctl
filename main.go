@@ -13,7 +13,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -24,6 +23,7 @@ import (
 )
 
 var program *tea.Program
+var stoppedPIDs sync.Map
 
 type activePanel int
 
@@ -261,7 +261,7 @@ func writeTaskFile(folderPath string, taskID int, nameAlias string, state string
 func StartTask(nameAlias string, command string, folderPath string, input map[string]interface{}) (*exec.Cmd, int, error) {
 	taskID := getNextTaskID(folderPath)
 	cmd := exec.Command("bash", "-c", command)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	prepareCmd(cmd)
 	cmd.Env = os.Environ()
 	for k, v := range input {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%v", k, v))
@@ -378,13 +378,11 @@ func StartTask(nameAlias string, command string, folderPath string, input map[st
 		state := "Success"
 		var finalErr error
 		if waitErr != nil {
-			if exitErr, ok := waitErr.(*exec.ExitError); ok {
-				status := exitErr.Sys().(syscall.WaitStatus)
-				if status.Signaled() && status.Signal() == syscall.SIGKILL {
-					state = "Stopped"
-				} else {
-					state = "Failed"
-				}
+			pid := cmd.Process.Pid
+			if _, stopped := stoppedPIDs.LoadAndDelete(pid); stopped {
+				state = "Stopped"
+			} else if isSignaledStopped(waitErr) {
+				state = "Stopped"
 			} else {
 				state = "Failed"
 			}
@@ -414,8 +412,8 @@ func StopTask(cmd *exec.Cmd) error {
 	if cmd == nil || cmd.Process == nil {
 		return nil
 	}
-	pid := cmd.Process.Pid
-	return syscall.Kill(-pid, syscall.SIGKILL)
+	stoppedPIDs.Store(cmd.Process.Pid, true)
+	return killProcessGroup(cmd)
 }
 
 // --- TUI MODEL & VIEW ---
