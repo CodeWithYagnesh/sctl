@@ -110,3 +110,50 @@ echo "Successfully installed ${BINARY_NAME} to ${BINDIR}/${BINARY_FILE}!"
 if [ "${BINDIR}" = "${HOME}/.local/bin" ]; then
   echo "Please make sure ${BINDIR} is in your PATH."
 fi
+
+# Create default configuration directory and file
+CONFIG_DIR="${HOME}/.config/sctl"
+CONFIG_FILE="${CONFIG_DIR}/config.yaml"
+
+echo "Configuring default config file at ${CONFIG_FILE}..."
+mkdir -p "${CONFIG_DIR}"
+
+if [ ! -f "${CONFIG_FILE}" ]; then
+  cat <<EOF > "${CONFIG_FILE}"
+scripts:
+  - name_alias: hello_world
+    description: Print a friendly greeting
+    command: echo "Hello, World!"
+    output_folder_path: ./output
+EOF
+  echo "Default configuration file created."
+else
+  echo "Configuration file already exists at ${CONFIG_FILE}."
+fi
+
+# Add SCTL_CONFIG environment variable to shell profile if not already set
+SHELL_PROFILES=""
+if [ -f "${HOME}/.bashrc" ]; then
+  SHELL_PROFILES="${SHELL_PROFILES} ${HOME}/.bashrc"
+fi
+if [ -f "${HOME}/.zshrc" ]; then
+  SHELL_PROFILES="${SHELL_PROFILES} ${HOME}/.zshrc"
+fi
+if [ -f "${HOME}/.profile" ]; then
+  SHELL_PROFILES="${SHELL_PROFILES} ${HOME}/.profile"
+fi
+
+ENV_ADDED="false"
+for PROFILE in ${SHELL_PROFILES}; do
+  if ! grep -q "SCTL_CONFIG" "${PROFILE}"; then
+    echo "" >> "${PROFILE}"
+    echo "# sctl (Script Controller) configuration path" >> "${PROFILE}"
+    echo "export SCTL_CONFIG=\"\${HOME}/.config/sctl/config.yaml\"" >> "${PROFILE}"
+    ENV_ADDED="true"
+    echo "Added SCTL_CONFIG to ${PROFILE}"
+  fi
+done
+
+if [ "${ENV_ADDED}" = "true" ]; then
+  echo "Please restart your terminal or run: source <your-shell-profile> (e.g. source ~/.bashrc or source ~/.zshrc) to apply SCTL_CONFIG change."
+fi

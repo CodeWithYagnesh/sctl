@@ -22,7 +22,7 @@
 Install `sctl` to `/usr/local/bin` (or `~/.local/bin` if `/usr/local/bin` is not writable) with a single command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/CodeWithYagnesh/sctl/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/CodeWithYagnesh/sctl/refs/heads/main/install.sh | sh
 ```
 
 ### 2. Install via Go
@@ -30,6 +30,17 @@ If you have Go installed on your system, you can build and install the binary di
 
 ```bash
 go install github.com/CodeWithYagnesh/sctl@latest
+```
+
+### 3. Uninstall
+To completely remove `sctl` from your system (including its cron configurations):
+
+```bash
+# Remove the binary from possible installation directories
+rm -f /usr/local/bin/sctl ~/.local/bin/sctl $(go env GOPATH)/bin/sctl 2>/dev/null || sudo rm -f /usr/local/bin/sctl
+
+# Clean up any sctl scheduled jobs from your crontab
+crontab -l 2>/dev/null | grep -v -E "SCTL" | crontab -
 ```
 
 ---
@@ -46,10 +57,10 @@ export SCTL_CONFIG="$HOME/.config/sctl/config.yaml"
 
 ```yaml
 scripts:
-  - name_alias: tls_verification
-    description: Kubernetes TLS Verification notebook
-    command: jupyter nbconvert --execute --to notebook --output "dist/tls_output_$(date +%Y-%m-%d).ipynb" tls_verification.ipynb
-    output_folder_path: ./output/tls_verification
+  - name_alias: system_check
+    description: Run automated system health checks
+    command: ./scripts/health_check.sh
+    output_folder_path: ./output/system_check
     cron: "0 0 * * *" # Runs daily at midnight
 
   - name_alias: database_backup
@@ -118,12 +129,12 @@ Every run of a task is assigned an incremental `task_id` and saved in `output_fo
 ```yaml
 task:
   task_id: 15
-  script_name_alias: tls_verification
+  script_name_alias: system_check
   state: Success
   progress: 100
   logs: |
-    [15:30:00] Starting TLS validation checks...
-    [15:30:04] Checked 14 ingresses. All certificates valid.
+    [15:30:00] Starting automated system health checks...
+    [15:30:04] Checked system metrics. All parameters normal.
     [15:30:05] Finished successfully.
 ```
 

@@ -63,16 +63,10 @@ func LoadConfig() (*Config, error) {
 			defaultConfig := Config{
 				Scripts: []ScriptConfig{
 					{
-						NameAlias:        "tls_verification",
-						Description:      "Kube TLS Verification cronjob notebook",
-						Command:          `prev=1 "/home/yagnesh/.local/bin/jupyter" nbconvert --execute --to notebook --output "/home/yagnesh/work/kube/project/cronjob/tlsoutput/tls_verification_output_$(date +%Y-%m-%d).ipynb" "/home/yagnesh/work/kube/project/tls_verification.ipynb"`,
-						OutputFolderPath: "/home/yagnesh/work/kube/project/cronjob/tlsoutput",
-					},
-					{
-						NameAlias:        "ingress_check",
-						Description:      "Ingress controller controller configuration check",
-						Command:          `prev=1 "/home/yagnesh/.local/bin/jupyter" nbconvert --execute --to notebook --output "/home/yagnesh/work/kube/project/cronjob/tlsoutput/ingress_check_output_$(date +%Y-%m-%d).ipynb" "/home/yagnesh/work/kube/project/ingress_check.ipynb"`,
-						OutputFolderPath: "/home/yagnesh/work/kube/project/cronjob/tlsoutput",
+						NameAlias:        "hello_world",
+						Description:      "Print a friendly greeting",
+						Command:          `echo "Hello, World!"`,
+						OutputFolderPath: "./output",
 					},
 				},
 			}
@@ -529,13 +523,13 @@ func initialModel() *model {
 		t.Width = 40
 		switch i {
 		case 0:
-			t.Placeholder = "e.g., data_replication"
+			t.Placeholder = "e.g., system_backup"
 		case 1:
-			t.Placeholder = "e.g., Prometheus data replication check"
+			t.Placeholder = "e.g., Run automated system backups"
 		case 2:
-			t.Placeholder = "e.g., python scripts/replicate.py"
+			t.Placeholder = "e.g., bash scripts/backup.sh"
 		case 3:
-			t.Placeholder = "e.g., ./output/data_replication"
+			t.Placeholder = "e.g., ./output/backup"
 		case 4:
 			t.Placeholder = "e.g., */5 * * * * (optional)"
 		}

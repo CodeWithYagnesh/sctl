@@ -117,15 +117,15 @@ func TestLoadConfigDefault(t *testing.T) {
 	// Verify specific default script details
 	found := false
 	for _, sc := range cfg.Scripts {
-		if sc.NameAlias == "tls_verification" {
+		if sc.NameAlias == "hello_world" {
 			found = true
-			if sc.OutputFolderPath != "/home/yagnesh/work/kube/project/cronjob/tlsoutput" {
-				t.Errorf("expected output_folder_path '/home/yagnesh/work/kube/project/cronjob/tlsoutput', got %s", sc.OutputFolderPath)
+			if sc.OutputFolderPath != "./output" {
+				t.Errorf("expected output_folder_path './output', got %s", sc.OutputFolderPath)
 			}
 		}
 	}
 	if !found {
-		t.Errorf("default script 'tls_verification' not found")
+		t.Errorf("default script 'hello_world' not found")
 	}
 }
 
