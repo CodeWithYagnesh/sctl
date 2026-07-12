@@ -598,7 +598,6 @@ func initialModel() *model {
 	inputs := make([]textinput.Model, 5)
 	for i := range inputs {
 		t := textinput.New()
-		t.CharLimit = 100
 		t.Width = 40
 		switch i {
 		case 0:
@@ -1324,6 +1323,9 @@ func (m *model) updateViewport() {
 		logs = lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render("No output logs. Run the script to see output.")
 	} else {
 		logs = InterpretCarriageReturns(logs)
+		if m.viewport.Width > 0 {
+			logs = lipgloss.NewStyle().Width(m.viewport.Width).Render(logs)
+		}
 	}
 	m.viewport.SetContent(logs)
 	if focusedScript.State == "Running" {
@@ -1528,8 +1530,8 @@ func drawProgressBar(width int, percent float64, running bool) string {
 	}
 	emptyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#2c2c2c"))
 
-	filled := strings.Repeat("█", filledLen)
-	empty := strings.Repeat("░", emptyLen)
+	filled := strings.Repeat("▰", filledLen)
+	empty := strings.Repeat("▱", emptyLen)
 	return filledStyle.Render(filled) + emptyStyle.Render(empty)
 }
 
