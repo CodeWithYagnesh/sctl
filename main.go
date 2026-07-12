@@ -192,6 +192,65 @@ type TaskYAML struct {
 	} `yaml:"task"`
 }
 
+type TaskSummary struct {
+	TaskID    int
+	State     string
+	Timestamp time.Time
+	FilePath  string
+}
+
+func getTaskHistory(folderPath string) ([]TaskSummary, error) {
+	if _, err := os.Stat(folderPath); os.IsNotExist(err) {
+		return nil, nil
+	}
+	files, err := os.ReadDir(folderPath)
+	if err != nil {
+		return nil, err
+	}
+	var history []TaskSummary
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		name := file.Name()
+		if strings.HasPrefix(name, "task_") && strings.HasSuffix(name, ".yaml") {
+			var id int
+			_, err := fmt.Sscanf(name, "task_%d.yaml", &id)
+			if err == nil {
+				filePath := filepath.Join(folderPath, name)
+				info, err := file.Info()
+				timestamp := time.Time{}
+				if err == nil {
+					timestamp = info.ModTime()
+				}
+
+				var state string
+				data, err := os.ReadFile(filePath)
+				if err == nil {
+					var taskFile TaskYAML
+					if err := yaml.Unmarshal(data, &taskFile); err == nil {
+						state = taskFile.Task.State
+					}
+				}
+				if state == "" {
+					state = "Unknown"
+				}
+
+				history = append(history, TaskSummary{
+					TaskID:    id,
+					State:     state,
+					Timestamp: timestamp,
+					FilePath:  filePath,
+				})
+			}
+		}
+	}
+	sort.Slice(history, func(i, j int) bool {
+		return history[i].TaskID > history[j].TaskID
+	})
+	return history, nil
+}
+
 type TaskUpdateMsg struct {
 	ScriptNameAlias string
 	TaskID          int
@@ -255,6 +314,7 @@ func StartTask(nameAlias string, command string, folderPath string, input map[st
 	cmd := exec.Command("bash", "-c", command)
 	prepareCmd(cmd)
 	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, fmt.Sprintf("SCTL_TASK_ID=%d", taskID))
 	for k, v := range input {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%v", k, v))
 	}
@@ -437,6 +497,8 @@ type model struct {
 	confirmDeleteFocused int
 	statusMsg            string
 	statusMsgTime        time.Time
+	historyItems         []TaskSummary
+	historyCursor        int
 }
 
 type TaskStartedMsg struct {
@@ -503,11 +565,32 @@ func initialModel() *model {
 
 	scripts := make([]ScriptState, len(cfg.Scripts))
 	for i, sc := range cfg.Scripts {
+		state := "Idle"
+		progress := 0
+		logs := ""
+		taskID := 0
+
+		history, err := getTaskHistory(sc.OutputFolderPath)
+		if err == nil && len(history) > 0 {
+			latest := history[0]
+			data, err := os.ReadFile(latest.FilePath)
+			if err == nil {
+				var taskFile TaskYAML
+				if err := yaml.Unmarshal(data, &taskFile); err == nil {
+					state = taskFile.Task.State
+					progress = taskFile.Task.Progress
+					logs = taskFile.Task.Logs.Value
+					taskID = taskFile.Task.TaskID
+				}
+			}
+		}
+
 		scripts[i] = ScriptState{
 			Config:   sc,
-			State:    "Idle",
-			Progress: 0,
-			Logs:     "",
+			TaskID:   taskID,
+			State:    state,
+			Progress: progress,
+			Logs:     logs,
 			Checked:  false,
 		}
 	}
@@ -681,6 +764,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateDeleteConfirm(msg)
 		}
 
+		if m.activeView == "history" {
+			return m.updateHistoryView(msg)
+		}
+
 		switch key {
 		case "q":
 			for i := range m.scripts {
@@ -724,6 +811,20 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "o":
 			m.openHTMLOutput()
+			return m, nil
+		case "h", "H":
+			if len(m.scripts) > 0 {
+				focusedScript := m.scripts[m.cursor]
+				history, err := getTaskHistory(focusedScript.Config.OutputFolderPath)
+				if err != nil || len(history) == 0 {
+					m.statusMsg = "No history found for script: " + focusedScript.Config.NameAlias
+					m.statusMsgTime = time.Now()
+				} else {
+					m.historyItems = history
+					m.historyCursor = 0
+					m.activeView = "history"
+				}
+			}
 			return m, nil
 		case "s":
 			m.stopSelected()
@@ -821,6 +922,51 @@ func (m *model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.formInputs[m.focusedInput], cmd = m.formInputs[m.focusedInput].Update(msg)
 		return m, cmd
+	}
+	return m, nil
+}
+
+func (m *model) updateHistoryView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	switch key {
+	case "esc", "q":
+		m.activeView = "main"
+		return m, nil
+	case "up", "k":
+		if m.historyCursor > 0 {
+			m.historyCursor--
+		}
+		return m, nil
+	case "down", "j":
+		if m.historyCursor < len(m.historyItems)-1 {
+			m.historyCursor++
+		}
+		return m, nil
+	case "enter":
+		if len(m.historyItems) > 0 {
+			selected := m.historyItems[m.historyCursor]
+			data, err := os.ReadFile(selected.FilePath)
+			if err == nil {
+				var taskFile TaskYAML
+				if err := yaml.Unmarshal(data, &taskFile); err == nil {
+					m.scripts[m.cursor].Logs = taskFile.Task.Logs.Value
+					m.scripts[m.cursor].TaskID = taskFile.Task.TaskID
+					m.scripts[m.cursor].State = taskFile.Task.State
+					m.scripts[m.cursor].Progress = taskFile.Task.Progress
+					m.updateViewport()
+					m.statusMsg = fmt.Sprintf("Loaded logs for Task #%d", taskFile.Task.TaskID)
+					m.statusMsgTime = time.Now()
+				} else {
+					m.statusMsg = fmt.Sprintf("Error parsing task file: %v", err)
+					m.statusMsgTime = time.Now()
+				}
+			} else {
+				m.statusMsg = fmt.Sprintf("Error reading task file: %v", err)
+				m.statusMsgTime = time.Now()
+			}
+		}
+		m.activeView = "main"
+		return m, nil
 	}
 	return m, nil
 }
@@ -1320,16 +1466,30 @@ func (m *model) openHTMLOutput() {
 		return
 	}
 
-	sort.Slice(htmlFiles, func(i, j int) bool {
-		fi1, err1 := os.Stat(htmlFiles[i])
-		fi2, err2 := os.Stat(htmlFiles[j])
-		if err1 != nil || err2 != nil {
-			return false
+	var targetFile string
+	if script.TaskID > 0 {
+		taskSub1 := fmt.Sprintf("task_%d", script.TaskID)
+		taskSub2 := fmt.Sprintf("_%d", script.TaskID)
+		for _, path := range htmlFiles {
+			base := filepath.Base(path)
+			if strings.Contains(base, taskSub1) || strings.Contains(base, taskSub2) {
+				targetFile = path
+				break
+			}
 		}
-		return fi1.ModTime().After(fi2.ModTime())
-	})
+	}
 
-	targetFile := htmlFiles[0]
+	if targetFile == "" {
+		sort.Slice(htmlFiles, func(i, j int) bool {
+			fi1, err1 := os.Stat(htmlFiles[i])
+			fi2, err2 := os.Stat(htmlFiles[j])
+			if err1 != nil || err2 != nil {
+				return false
+			}
+			return fi1.ModTime().After(fi2.ModTime())
+		})
+		targetFile = htmlFiles[0]
+	}
 	absPath, err := filepath.Abs(targetFile)
 	if err == nil {
 		targetFile = absPath
@@ -1541,6 +1701,7 @@ func (m *model) renderBottomBar(width int) string {
 		keyStyle.Render("A") + descStyle.Render("Add"),
 		keyStyle.Render("Enter") + descStyle.Render("Edit"),
 		keyStyle.Render("D/Del") + descStyle.Render("Delete"),
+		keyStyle.Render("H") + descStyle.Render("History"),
 		keyStyle.Render("P") + descStyle.Render("Parallel"),
 		keyStyle.Render("O") + descStyle.Render("Open HTML"),
 		keyStyle.Render("Tab") + descStyle.Render("Switch"),
@@ -1561,23 +1722,25 @@ func (m *model) renderFramedBox(titleText string, titleColor string, borderColor
 		dashesCount = 1
 	}
 
-	topBorder := "┌─"
+	topBorderStart := borderStyle.Render("┌─")
+	var topBorderTitle string
 	if titleText != "" {
-		topBorder += lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(titleColor)).Render(titleText)
+		topBorderTitle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(titleColor)).Render(titleText)
 	}
-	topBorder += strings.Repeat("─", dashesCount) + "┐"
+	topBorderEnd := borderStyle.Render(strings.Repeat("─", dashesCount) + "┐")
+	topBorderLine := topBorderStart + topBorderTitle + topBorderEnd
 
 	var s strings.Builder
-	s.WriteString(borderStyle.Render(topBorder) + "\n")
+	s.WriteString(topBorderLine + "\n")
 
 	contentWidth := boxWidth - 4
 	for _, line := range innerContent {
 		w := lipgloss.Width(line)
 		var paddedLine string
 		if w < contentWidth {
-			paddedLine = "  " + line + strings.Repeat(" ", contentWidth-w) + "  "
+			paddedLine = " " + line + strings.Repeat(" ", contentWidth-w) + " "
 		} else {
-			paddedLine = "  " + line + "  "
+			paddedLine = " " + line + " "
 		}
 		s.WriteString(borderStyle.Render("│") + paddedLine + borderStyle.Render("│") + "\n")
 	}
@@ -1758,6 +1921,69 @@ func (m *model) renderDeleteConfirm() string {
 	inner = append(inner, "")
 
 	return m.renderFramedBox(" Delete Confirmation ", "#f92672", "#f92672", inner, 50)
+}
+
+func (m *model) renderHistory() string {
+	var inner []string
+	inner = append(inner, "")
+
+	focusedScript := m.scripts[m.cursor]
+	titleLabel := fmt.Sprintf("Run History for: %s", focusedScript.Config.NameAlias)
+	inner = append(inner, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00ffd7")).Render(titleLabel))
+	inner = append(inner, "")
+
+	if len(m.historyItems) == 0 {
+		inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render("No past runs found in output folder."))
+		inner = append(inner, "")
+	} else {
+		maxVisible := 8
+		startIdx := 0
+		if len(m.historyItems) > maxVisible {
+			startIdx = m.historyCursor - maxVisible/2
+			if startIdx < 0 {
+				startIdx = 0
+			}
+			if startIdx+maxVisible > len(m.historyItems) {
+				startIdx = len(m.historyItems) - maxVisible
+			}
+		}
+		endIdx := startIdx + maxVisible
+		if endIdx > len(m.historyItems) {
+			endIdx = len(m.historyItems)
+		}
+
+		for i := startIdx; i < endIdx; i++ {
+			item := m.historyItems[i]
+			cursor := "  "
+			if i == m.historyCursor {
+				cursor = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff007f")).Render("▶ ")
+			}
+
+			var badge string
+			switch item.State {
+			case "Success":
+				badge = badgeSuccess.Render("SUCCESS")
+			case "Failed":
+				badge = badgeFailed.Render("FAILED")
+			case "Stopped":
+				badge = badgeStopped.Render("STOPPED")
+			case "Running":
+				badge = badgeRunning.Render("RUNNING")
+			default:
+				badge = badgeIdle.Render(item.State)
+			}
+
+			timeStr := item.Timestamp.Format("2006-01-02 15:04:05")
+			itemText := fmt.Sprintf("%sTask #%-3d  %-10s  %s", cursor, item.TaskID, badge, lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render(timeStr))
+			inner = append(inner, itemText)
+		}
+		inner = append(inner, "")
+	}
+
+	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#a6adc8")).Render("  Enter: Load Log  |  Esc: Cancel"))
+	inner = append(inner, "")
+
+	return m.renderFramedBox(" Execution History ", "#ff007f", "#ff007f", inner, 60)
 }
 
 func getLargeLogo() string {
@@ -1984,6 +2210,9 @@ func (m *model) View() string {
 	if m.activeView == "delete_confirm" {
 		return m.renderDeleteConfirm()
 	}
+	if m.activeView == "history" {
+		return m.renderHistory()
+	}
 
 	header := m.renderHeader(m.width)
 
@@ -2118,6 +2347,7 @@ func printHelp() {
 	fmt.Printf("   %-25s %s\n", keyStyle.Render("a"), descStyle.Render("Create a new script configuration"))
 	fmt.Printf("   %-25s %s\n", keyStyle.Render("Enter"), descStyle.Render("Edit schedule and environment variables for the selected script"))
 	fmt.Printf("   %-25s %s\n", keyStyle.Render("d / Delete"), descStyle.Render("Remove the selected script configuration"))
+	fmt.Printf("   %-25s %s\n", keyStyle.Render("h / H"), descStyle.Render("View task execution history and load past logs"))
 	fmt.Printf("   %-25s %s\n", keyStyle.Render("p"), descStyle.Render("Toggle parallel execution mode (concurrently or sequentially)"))
 	fmt.Printf("   %-25s %s\n", keyStyle.Render("o"), descStyle.Render("Open the latest HTML report/output in system default browser"))
 	fmt.Printf("   %-25s %s\n", keyStyle.Render("[ / ] or PgUp/PgDn"), descStyle.Render("Scroll logs viewport up / down"))

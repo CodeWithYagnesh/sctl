@@ -1,11 +1,15 @@
-![Gif](assets/banner.png)
-
+![Banner](assets/banner.png)
 
 # sctl (Script Controller) 🚀
 
+[![Go Version](https://img.shields.io/github/go-mod/go-version/CodeWithYagnesh/sctl?style=for-the-badge&logo=go&color=00ffd7&logoColor=000000)](https://go.dev/)
+[![Latest Release](https://img.shields.io/github/v/release/CodeWithYagnesh/sctl?style=for-the-badge&logo=github&color=ff007f)](https://github.com/CodeWithYagnesh/sctl/releases)
+[![Stars](https://img.shields.io/github/stars/CodeWithYagnesh/sctl?style=for-the-badge&logo=github&color=ffea00&logoColor=000000)](https://github.com/CodeWithYagnesh/sctl/stargazers)
+[![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-444444?style=for-the-badge)](https://github.com/CodeWithYagnesh/sctl)
+
 `sctl` is a modern, elegant Terminal User Interface (TUI) task automation dashboard, script runner, and cron scheduler built in Go using the **Bubble Tea** framework. It provides a visual workspace for managing, running, and scheduling tasks, scripts, and notebooks with real-time log monitoring and progress tracking.
 
-![Gif](assets/poster.png)
+![Poster](assets/poster.png)
 
 ---
 
@@ -89,6 +93,9 @@ scripts:
 | `input` | Map | Environment variables supplied to the script execution environment. |
 | `cron` | String | *(Optional)* Standard cron expression to schedule automatic headless executions. |
 
+> [!IMPORTANT]
+> **Unique Output Folders Required:** Each script configured in `sctl` **MUST** have a unique `output_folder_path`. Since task files (`task_<id>.yaml`) and HTML reports are scanned and loaded from this directory, using the same output directory across multiple scripts will cause task IDs and log/HTML records to conflict.
+
 ---
 
 ## Usage 🛠️
@@ -102,6 +109,13 @@ You can run `sctl` with the following flags:
 | `--help`, `-h` | Display the styled help banner, listing TUI shortcuts, environment variables, and usage options. |
 | `--version`, `-v` | Print the current `sctl` version and author information. |
 | `--run <script-alias>`, `-run <script-alias>` | Execute the specified script directly in headless mode (useful for cron jobs or automation). |
+
+### Environment Variables 🌐
+
+| Variable | Description |
+|---|---|
+| `SCTL_CONFIG` | Custom path to the `config.yaml` file (defaults to current directory). |
+| `SCTL_TASK_ID` | Injected into the execution environment of tasks to indicate the current task run's ID (e.g. `14`). |
 
 ### Launching the TUI Dashboard
 Simply run `sctl` to launch the interactive interface:
@@ -123,6 +137,7 @@ sctl
 | `a` | Create a new task configuration |
 | `Enter` | Edit input environment variables for the selected script |
 | `d` / `Delete` | Remove the selected task config |
+| `h` / `H` | View task execution history and load past logs |
 | `p` | Toggle parallel execution mode (runs checked scripts concurrently or sequentially) |
 | `o` | Open the latest HTML report/output file in the system default web browser |
 | `[` / `]` | Scroll logs page up / page down |
@@ -213,6 +228,15 @@ sleep 1
 echo "__PROGRESS__:100"
 echo "Deployment successful!"
 ```
+
+## Context-Aware HTML Report Integration 📄
+
+`sctl` automatically matches task execution histories to their respective HTML reports if your scripts dynamically name the HTML output files.
+
+### How it works:
+1. When starting a task, `sctl` injects an environment variable `SCTL_TASK_ID` containing the current incremental task ID (e.g., `14`, `15`).
+2. Have your script output its HTML report using this ID, such as naming the file `report_task_${SCTL_TASK_ID}.html` or `report_${SCTL_TASK_ID}.html`.
+3. When you browse past runs in the **History Viewer** and press **`O`**, `sctl` looks for any HTML file in the output folder containing `task_<id>` or `_<id>` and opens the correct historical HTML report in your browser. If none is found, it defaults to opening the newest HTML file in the output directory.
 
 ---
 
