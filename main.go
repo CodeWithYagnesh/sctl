@@ -2318,7 +2318,7 @@ func printHelp() {
 
 	authorLabel := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#75715e")).
-		Render("by Yagnesh Jariwala")
+		Render("by github/codewithyagnesh")
 
 	fmt.Println()
 	fmt.Print(getLargeLogo())
@@ -2376,7 +2376,7 @@ func main() {
 		}
 		if len(os.Args) >= 2 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
 			fmt.Printf("sctl version: %s\n", Version)
-			fmt.Printf("Author: Yagnesh Jariwala\n")
+			fmt.Printf("GitHub: github/codewithyagnesh\n")
 			os.Exit(0)
 		}
 		if len(os.Args) >= 2 && (os.Args[1] == "--help" || os.Args[1] == "-h") {
