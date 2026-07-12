@@ -93,6 +93,16 @@ scripts:
 
 ## Usage 🛠️
 
+### Command Line Flags 🏁
+
+You can run `sctl` with the following flags:
+
+| Flag | Description |
+|---|---|
+| `--help`, `-h` | Display the styled help banner, listing TUI shortcuts, environment variables, and usage options. |
+| `--version`, `-v` | Print the current `sctl` version and author information. |
+| `--run <script-alias>`, `-run <script-alias>` | Execute the specified script directly in headless mode (useful for cron jobs or automation). |
+
 ### Launching the TUI Dashboard
 Simply run `sctl` to launch the interactive interface:
 

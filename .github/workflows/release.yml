@@ -60,7 +60,7 @@ jobs:
           fi
           
           # Build binary with optimizations (omit symbol table and debug information)
-          go build -ldflags="-s -w" -o "dist/${BINARY_OUT}" .
+          go build -ldflags="-X 'main.Version=${GITHUB_REF_NAME}' -s -w" -o "dist/${BINARY_OUT}" .
 
       - name: Package Release Asset
         id: package

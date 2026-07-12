@@ -219,5 +219,6 @@ if [ "${ENV_ADDED}" = "true" ]; then
   success "Installation complete! Please restart your terminal or run:"
   printf "    ${BOLD}source ~/.bashrc${NC} or ${BOLD}source ~/.zshrc${NC}\n"
 else
+  sctl --help
   success "Installation complete! sctl is ready to use."
 fi
