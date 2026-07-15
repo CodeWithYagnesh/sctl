@@ -512,48 +512,56 @@ type TaskStartErrorMsg struct {
 	Error           error
 }
 
+// --- Professional Color Palette ---
+// Accent: Indigo (#6366f1), Emerald (#10b981), Rose (#f43f5e), Amber (#f59e0b)
+// Neutrals: Slate dark (#0f1117), border dim (#2d3748), border bright (#4a5568)
 var (
 	focusedStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#00ffd7")).
+			BorderForeground(lipgloss.Color("#6366f1")).
 			Padding(0, 1)
 
 	unfocusedStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#3c3836")).
+			BorderForeground(lipgloss.Color("#2d3748")).
 			Padding(0, 1)
 
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#ff007f"))
+			Foreground(lipgloss.Color("#6366f1"))
 
+	// Running: bright emerald-green
 	badgeRunning = lipgloss.NewStyle().
-			Background(lipgloss.Color("#00ffd7")).
-			Foreground(lipgloss.Color("#000000")).
+			Background(lipgloss.Color("#10b981")).
+			Foreground(lipgloss.Color("#ffffff")).
 			Bold(true).
 			Padding(0, 1)
 
+	// Success: muted green-teal
 	badgeSuccess = lipgloss.NewStyle().
-			Background(lipgloss.Color("#a6e22e")).
-			Foreground(lipgloss.Color("#000000")).
+			Background(lipgloss.Color("#059669")).
+			Foreground(lipgloss.Color("#ffffff")).
 			Bold(true).
 			Padding(0, 1)
 
+	// Failed: rose-red
 	badgeFailed = lipgloss.NewStyle().
-			Background(lipgloss.Color("#f92672")).
+			Background(lipgloss.Color("#f43f5e")).
 			Foreground(lipgloss.Color("#ffffff")).
 			Bold(true).
 			Padding(0, 1)
 
+	// Stopped: amber-orange
 	badgeStopped = lipgloss.NewStyle().
-			Background(lipgloss.Color("#f4bf75")).
+			Background(lipgloss.Color("#f59e0b")).
 			Foreground(lipgloss.Color("#000000")).
 			Bold(true).
 			Padding(0, 1)
 
+	// Idle: muted slate
 	badgeIdle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#75715e")).
-			Foreground(lipgloss.Color("#ffffff")).
+			Background(lipgloss.Color("#374151")).
+			Foreground(lipgloss.Color("#9ca3af")).
 			Padding(0, 1)
 )
 
@@ -1303,12 +1311,6 @@ func InterpretCarriageReturns(s string) string {
 }
 
 func (m *model) getHeaderHeight() int {
-	if m.height >= 32 && m.width >= 105 {
-		return 12
-	}
-	if m.height >= 25 && m.width >= 80 {
-		return 5
-	}
 	return 3
 }
 
@@ -1320,7 +1322,7 @@ func (m *model) updateViewport() {
 	focusedScript := m.scripts[m.cursor]
 	logs := focusedScript.Logs
 	if logs == "" {
-		logs = lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render("No output logs. Run the script to see output.")
+		logs = lipgloss.NewStyle().Foreground(lipgloss.Color("#4a5568")).Italic(true).Render("No output yet — run the script to see logs here.")
 	} else {
 		logs = InterpretCarriageReturns(logs)
 		if m.viewport.Width > 0 {
@@ -1524,14 +1526,16 @@ func drawProgressBar(width int, percent float64, running bool) string {
 	}
 	emptyLen := width - filledLen
 
-	filledStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#00ffd7"))
-	if !running {
-		filledStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e"))
+	var filledStyle lipgloss.Style
+	if running {
+		filledStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#6366f1"))
+	} else {
+		filledStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#059669"))
 	}
-	emptyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#2c2c2c"))
+	emptyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#2d3748"))
 
-	filled := strings.Repeat("▰", filledLen)
-	empty := strings.Repeat("▱", emptyLen)
+	filled := strings.Repeat("▮", filledLen)
+	empty := strings.Repeat("▯", emptyLen)
 	return filledStyle.Render(filled) + emptyStyle.Render(empty)
 }
 
@@ -1542,99 +1546,103 @@ func (m *model) renderLeftPanel(width, height int) string {
 		borderStyle = focusedStyle
 	}
 
-	header := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ff007f")).Render(" 📑 SCRIPTS CONTROL ")
-	s.WriteString(header + "\n\n")
+	// ── Section header ───────────────────────────────────────────
+	titleTxt := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e2e8f0")).Render("SCRIPTS")
+	countChip := lipgloss.NewStyle().
+		Background(lipgloss.Color("#1e293b")).
+		Foreground(lipgloss.Color("#64748b")).
+		Padding(0, 1).
+		Render(fmt.Sprintf("%d", len(m.scripts)))
+	hint := lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render("Space·select  R·run")
+	titleLeft := titleTxt + " " + countChip
+	availW := width - 8
+	sp := availW - lipgloss.Width(titleLeft) - lipgloss.Width(hint)
+	if sp < 1 {
+		sp = 1
+	}
+	s.WriteString(titleLeft + strings.Repeat(" ", sp) + hint + "\n")
+	divider := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e293b")).Render(strings.Repeat("─", availW))
+	s.WriteString(divider + "\n")
 
-	contentHeight := height - 5
-	if contentHeight < 1 {
-		contentHeight = 1
+	// ── Script cards ─────────────────────────────────────────────
+	if len(m.scripts) == 0 {
+		s.WriteString("\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Italic(true).
+			Render("  No scripts configured. Press A to add one.") + "\n")
 	}
 
 	for i, script := range m.scripts {
-		cursor := "  "
-		if i == m.cursor {
-			cursor = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff007f")).Render("▶ ")
-		}
+		isSelected := i == m.cursor
 
-		chk := "[ ]"
+		// Row 1 — name + status badge
+		cursorGlyph := "  "
+		if isSelected {
+			cursorGlyph = lipgloss.NewStyle().Foreground(lipgloss.Color("#6366f1")).Render("▶ ")
+		}
+		selGlyph := lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render("○")
 		if script.Checked {
-			chk = lipgloss.NewStyle().Foreground(lipgloss.Color("#00ffd7")).Render("[✔]")
+			selGlyph = lipgloss.NewStyle().Foreground(lipgloss.Color("#6366f1")).Render("●")
 		}
-
-		nameStr := script.Config.NameAlias
-		if i == m.cursor {
-			nameStr = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ffffff")).Render(nameStr)
-		} else {
-			nameStr = lipgloss.NewStyle().Foreground(lipgloss.Color("#c1c1c1")).Render(nameStr)
+		nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#94a3b8"))
+		if isSelected {
+			nameStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e2e8f0"))
 		}
+		name := nameStyle.Render(script.Config.NameAlias)
 
-		badge := ""
+		var badge string
 		switch script.State {
 		case "Running":
-			badge = badgeRunning.Render("RUNNING")
+			badge = badgeRunning.Render(" ● RUNNING ")
 		case "Success":
-			badge = badgeSuccess.Render("SUCCESS")
+			badge = badgeSuccess.Render(" ✓ SUCCESS ")
 		case "Failed":
-			badge = badgeFailed.Render("FAILED")
+			badge = badgeFailed.Render(" ✕ FAILED  ")
 		case "Stopped":
-			badge = badgeStopped.Render("STOPPED")
+			badge = badgeStopped.Render(" ⊘ STOPPED ")
 		default:
-			badge = badgeIdle.Render("IDLE")
+			badge = badgeIdle.Render("   IDLE    ")
 		}
 
-		progPercent := ""
-		if script.State != "Idle" {
-			progPercent = fmt.Sprintf(" %d%%", script.Progress)
+		row1left := cursorGlyph + selGlyph + " " + name
+		r1sp := availW - lipgloss.Width(row1left) - lipgloss.Width(badge)
+		if r1sp < 1 {
+			r1sp = 1
 		}
+		row1 := row1left + strings.Repeat(" ", r1sp) + badge
 
-		availableWidth := width - 8
-		if availableWidth < 10 {
-			availableWidth = 10
+		// Row 2 — progress bar with % label
+		barW := availW - 12
+		if barW < 4 {
+			barW = 4
 		}
-
-		line1 := fmt.Sprintf("%s%s %s", cursor, chk, nameStr)
-		line1Len := lipgloss.Width(line1)
-		badgeLen := lipgloss.Width(badge) + lipgloss.Width(progPercent)
-
-		spaces := availableWidth - line1Len - badgeLen
-		if spaces < 1 {
-			spaces = 1
+		pBar := drawProgressBar(barW, float64(script.Progress)/100.0, script.State == "Running")
+		pctLabel := lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Render(fmt.Sprintf(" %3d%%", script.Progress))
+		if script.State == "Idle" {
+			pctLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render("  --")
 		}
-		line1Final := line1 + strings.Repeat(" ", spaces) + badge + progPercent
+		row2 := "   " + pBar + pctLabel
 
-		pBar := drawProgressBar(12, float64(script.Progress)/100.0, script.State == "Running")
-		descStr := script.Config.Description
-		descWidth := availableWidth - 16
-		if descWidth < 0 {
-			descWidth = 0
+		// Row 3 — description (dimmed, truncated)
+		descW := availW - 4
+		desc := script.Config.Description
+		if descW > 3 && len(desc) > descW {
+			desc = desc[:descW-3] + "..."
 		}
-		if descWidth > 3 && len(descStr) > descWidth {
-			descStr = descStr[:descWidth-3] + "..."
+		row3 := "   " + lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Width(descW).Render(desc)
+
+		cardContent := row1 + "\n" + row2 + "\n" + row3
+
+		cardBorderColor := lipgloss.Color("#1e293b")
+		if isSelected {
+			cardBorderColor = lipgloss.Color("#6366f1")
 		}
-		descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Width(descWidth).MaxHeight(1)
-
-		line2 := fmt.Sprintf("  %s  %s", pBar, descStyle.Render(descStr))
-
-		cardContent := line1Final + "\n" + line2
-
 		cardStyle := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
+			BorderForeground(cardBorderColor).
 			Padding(0, 1).
-			Width(width - 8)
-
-		if i == m.cursor {
-			cardStyle = cardStyle.BorderForeground(lipgloss.Color("#ff007f"))
-		} else {
-			cardStyle = cardStyle.BorderForeground(lipgloss.Color("#3c3836"))
-		}
-
+			Width(availW)
 		s.WriteString(cardStyle.Render(cardContent) + "\n")
 	}
 
-	linesWritten := strings.Count(s.String(), "\n")
-	for i := linesWritten; i < contentHeight; i++ {
-		s.WriteString("\n")
-	}
 	return borderStyle.Width(width - 4).Height(height - 2).Render(s.String())
 }
 
@@ -1645,77 +1653,130 @@ func (m *model) renderRightPanel(width, height int) string {
 	}
 
 	if len(m.scripts) == 0 {
-		return borderStyle.Width(width - 4).Height(height - 2).Render("No scripts configured.")
+		return borderStyle.Width(width - 4).Height(height - 2).Render(
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Italic(true).Render("No scripts configured."),
+		)
 	}
 
-	focusedScript := m.scripts[m.cursor]
-	headerText := fmt.Sprintf(" 💻 OUTPUT: %s ", focusedScript.Config.NameAlias)
-	if focusedScript.TaskID > 0 {
-		headerText = fmt.Sprintf(" 💻 OUTPUT: %s (Task #%d) ", focusedScript.Config.NameAlias, focusedScript.TaskID)
+	script := m.scripts[m.cursor]
+
+	// ── Breadcrumb header ──────────────────────────────────────────
+	sep := lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render("  /  ")
+	titleLabel := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e2e8f0")).Render("OUTPUT LOG")
+	scriptLabel := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#6366f1")).Render(script.Config.NameAlias)
+	taskLabel := ""
+	if script.TaskID > 0 {
+		taskLabel = sep + lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Render(fmt.Sprintf("Task #%d", script.TaskID))
 	}
-	header := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ff007f")).Render(headerText)
 
 	scrollPercent := m.viewport.ScrollPercent()
-	scrollText := fmt.Sprintf(" %d%% ", int(scrollPercent*100))
+	scrollText := fmt.Sprintf("%d%%", int(scrollPercent*100))
 	if scrollPercent <= 0 {
-		scrollText = " Top "
+		scrollText = "Top"
 	} else if scrollPercent >= 1.0 {
-		scrollText = " Bottom "
+		scrollText = "End"
 	}
-	scrollIndicator := lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render(scrollText)
+	scrollChip := lipgloss.NewStyle().
+		Background(lipgloss.Color("#1e293b")).
+		Foreground(lipgloss.Color("#475569")).
+		Padding(0, 1).
+		Render(scrollText)
 
-	topBar := header
-	spaces := width - 4 - lipgloss.Width(header) - lipgloss.Width(scrollIndicator)
-	if spaces > 0 {
-		topBar += strings.Repeat(" ", spaces) + scrollIndicator
+	breadcrumb := titleLabel + sep + scriptLabel + taskLabel
+	availW := width - 4
+	sp := availW - lipgloss.Width(breadcrumb) - lipgloss.Width(scrollChip)
+	if sp < 1 {
+		sp = 1
 	}
+	topLine := breadcrumb + strings.Repeat(" ", sp) + scrollChip
+	divider := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e293b")).Render(strings.Repeat("─", availW))
 
 	content := m.viewport.View()
-	return borderStyle.Width(width - 4).Height(height - 2).Render(topBar + "\n\n" + content)
+	return borderStyle.Width(width - 4).Height(height - 2).Render(topLine + "\n" + divider + "\n" + content)
 }
 
 func (m *model) renderBottomBar(width int) string {
-	statusText := ""
+	// ── Status row (only shown when a message is active) ──────────────────
+	statusRow := ""
 	if m.statusMsg != "" && (m.statusMsgTime.IsZero() || time.Since(m.statusMsgTime) < 8*time.Second) {
-		statusText = lipgloss.NewStyle().
-			Background(lipgloss.Color("#e6db74")).
-			Foreground(lipgloss.Color("#000000")).
+		chip := lipgloss.NewStyle().
+			Background(lipgloss.Color("#6366f1")).
+			Foreground(lipgloss.Color("#ffffff")).
 			Bold(true).
 			Padding(0, 1).
-			Render(" STATUS ") + " " + lipgloss.NewStyle().Foreground(lipgloss.Color("#e6db74")).Render(m.statusMsg)
+			Render("INFO")
+		msg := lipgloss.NewStyle().Foreground(lipgloss.Color("#94a3b8")).Render(m.statusMsg)
+		statusRow = chip + "  " + msg + "\n"
 	}
 
-	parallelStr := ""
-	if m.parallelMode {
-		parallelStr = lipgloss.NewStyle().Background(lipgloss.Color("#ae81ff")).Foreground(lipgloss.Color("#000000")).Bold(true).Padding(0, 1).Render("⚡ PARALLEL")
-	} else {
-		parallelStr = lipgloss.NewStyle().Background(lipgloss.Color("#3e3d32")).Foreground(lipgloss.Color("#f8f8f2")).Padding(0, 1).Render("⚙ SEQUENTIAL")
+	// ── Keybinding legend row ──────────────────────────────────────────
+	border := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e293b")).Render(strings.Repeat("─", width))
+
+	type binding struct{ key, desc string }
+	bindings := []binding{
+		{"R", "Run"}, {"S", "Stop"}, {"Space", "Select"},
+		{"A", "Add"}, {"Enter", "Edit"}, {"D", "Delete"},
+		{"H", "History"}, {"P", "Parallel"}, {"O", "HTML"},
+		{"Tab", "Switch pane"}, {"Q", "Quit"},
 	}
+	kStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color("#1e293b")).
+		Foreground(lipgloss.Color("#a5b4fc")).
+		Bold(true).
+		Padding(0, 1)
+	dStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#475569"))
+	sepStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e293b")).Render(" │ ")
 
-	border := lipgloss.NewStyle().Foreground(lipgloss.Color("#2c2c2c")).Render(strings.Repeat("─", width))
-
-	keyStyle := lipgloss.NewStyle().Background(lipgloss.Color("#3c3836")).Foreground(lipgloss.Color("#ffffff")).Bold(true).Padding(0, 1)
-	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#a6adc8")).Padding(0, 1)
-
-	items := []string{
-		keyStyle.Render("R") + descStyle.Render("Run"),
-		keyStyle.Render("S") + descStyle.Render("Stop"),
-		keyStyle.Render("A") + descStyle.Render("Add"),
-		keyStyle.Render("Enter") + descStyle.Render("Edit"),
-		keyStyle.Render("D/Del") + descStyle.Render("Delete"),
-		keyStyle.Render("H") + descStyle.Render("History"),
-		keyStyle.Render("P") + descStyle.Render("Parallel"),
-		keyStyle.Render("O") + descStyle.Render("Open HTML"),
-		keyStyle.Render("Tab") + descStyle.Render("Switch"),
-		keyStyle.Render("Q") + descStyle.Render("Quit"),
+	var parts []string
+	for _, b := range bindings {
+		parts = append(parts, kStyle.Render(b.key)+" "+dStyle.Render(b.desc))
 	}
-	legend := strings.Join(items, " ")
+	legend := strings.Join(parts, sepStyle)
 
-	firstLine := lipgloss.JoinHorizontal(lipgloss.Center, parallelStr, "  ", statusText)
-	return border + "\n" + firstLine + "\n" + legend
+	return statusRow + border + "\n" + legend
 }
 
 func (m *model) renderFramedBox(titleText string, titleColor string, borderColor string, innerContent []string, boxWidth int) string {
+	// Center-render a modal box with rounded border
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(borderColor)).
+		Padding(1, 2).
+		Width(boxWidth)
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(titleColor))
+
+	var sb strings.Builder
+	if titleText != "" {
+		sb.WriteString(titleStyle.Render(titleText) + "\n")
+		sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#1e293b")).Render(strings.Repeat("─", boxWidth)) + "\n")
+	}
+	for _, line := range innerContent {
+		sb.WriteString(line + "\n")
+	}
+
+	boxStr := boxStyle.Render(sb.String())
+	boxHeight := strings.Count(boxStr, "\n")
+	padTop := (m.height - boxHeight) / 2
+	if padTop < 0 {
+		padTop = 0
+	}
+	padLeft := (m.width - lipgloss.Width(boxStr)) / 2
+	if padLeft < 0 {
+		padLeft = 0
+	}
+
+	var out strings.Builder
+	for i := 0; i < padTop; i++ {
+		out.WriteString("\n")
+	}
+	for _, line := range strings.Split(boxStr, "\n") {
+		out.WriteString(strings.Repeat(" ", padLeft) + line + "\n")
+	}
+	return out.String()
+}
+
+func (m *model) renderCustomFramedBox(titleText string, titleColor string, borderColor string, innerContent []string, boxWidth int) string {
 	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(borderColor))
 
 	titleLen := lipgloss.Width(titleText)
@@ -1776,166 +1837,167 @@ func (m *model) renderFramedBox(titleText string, titleColor string, borderColor
 
 func (m *model) renderForm() string {
 	var inner []string
-	inner = append(inner, "")
+
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#64748b"))
+	focusedBorder := lipgloss.Color("#6366f1")
+	blurBorder := lipgloss.Color("#1e293b")
+
+	fields := []string{
+		"Name alias  (unique identifier)",
+		"Description",
+		"Command  (shell command to run)",
+		"Output folder path",
+		"Cron schedule  (optional, e.g. */5 * * * *)",
+	}
 
 	for i, input := range m.formInputs {
-		label := ""
-		switch i {
-		case 0:
-			label = "Script Name Alias (uniquely identifies the script):"
-		case 1:
-			label = "Description:"
-		case 2:
-			label = "Command (shell command to run):"
-		case 3:
-			label = "Output Folder Path:"
-		case 4:
-			label = "Cron Expression (e.g., */5 * * * * - optional):"
-		}
-		inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render(label))
-
-		inputStr := input.View()
-		var styledInput string
+		inner = append(inner, labelStyle.Render(fields[i]))
+		borderColor := blurBorder
 		if i == m.focusedInput {
-			styledInput = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("#00ffd7")).
-				Width(50).
-				Render(inputStr)
-		} else {
-			styledInput = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("#3e3d32")).
-				Width(50).
-				Render(inputStr)
+			borderColor = focusedBorder
 		}
-		inputLines := strings.Split(styledInput, "\n")
-		for _, line := range inputLines {
-			if line != "" {
-				inner = append(inner, line)
+		styled := lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(borderColor).
+			Width(52).
+			Render(input.View())
+		for _, l := range strings.Split(styled, "\n") {
+			if l != "" {
+				inner = append(inner, l)
 			}
 		}
 		inner = append(inner, "")
 	}
 
-	saveBtn := " [ Save ] "
-	cancelBtn := " [ Cancel ] "
+	saveBg := lipgloss.NewStyle().Background(lipgloss.Color("#1e293b")).Foreground(lipgloss.Color("#475569")).Padding(0, 2).Render("Save")
+	cancelBg := lipgloss.NewStyle().Background(lipgloss.Color("#1e293b")).Foreground(lipgloss.Color("#475569")).Padding(0, 2).Render("Cancel")
 	if m.focusedInput == 5 {
-		saveBtn = lipgloss.NewStyle().Background(lipgloss.Color("#00ffd7")).Foreground(lipgloss.Color("#000000")).Bold(true).Render(" [ Save ] ")
-	} else if m.focusedInput == 6 {
-		cancelBtn = lipgloss.NewStyle().Background(lipgloss.Color("#ff007f")).Foreground(lipgloss.Color("#000000")).Bold(true).Render(" [ Cancel ] ")
+		saveBg = lipgloss.NewStyle().Background(lipgloss.Color("#6366f1")).Foreground(lipgloss.Color("#ffffff")).Bold(true).Padding(0, 2).Render("Save")
 	}
+	if m.focusedInput == 6 {
+		cancelBg = lipgloss.NewStyle().Background(lipgloss.Color("#f43f5e")).Foreground(lipgloss.Color("#ffffff")).Bold(true).Padding(0, 2).Render("Cancel")
+	}
+	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render("─────────────────────────────────────────────────────"))
+	inner = append(inner, "  "+saveBg+"    "+cancelBg)
 
-	inner = append(inner, fmt.Sprintf("             %s     %s", saveBtn, cancelBtn))
-	inner = append(inner, "")
-
-	return m.renderFramedBox(" Add New Script ", "#ff007f", "#ff007f", inner, 60)
+	return m.renderFramedBox("Add Script", "#e2e8f0", "#6366f1", inner, 62)
 }
 
 func (m *model) renderEnvForm() string {
 	var inner []string
-	inner = append(inner, "")
 
 	focusedScript := m.scripts[m.cursor]
-	titleLabel := fmt.Sprintf("Editing Config for: %s", focusedScript.Config.NameAlias)
-	inner = append(inner, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00ffd7")).Render(titleLabel))
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#64748b"))
+	scriptChip := lipgloss.NewStyle().
+		Background(lipgloss.Color("#1e293b")).
+		Foreground(lipgloss.Color("#818cf8")).
+		Bold(true).Padding(0, 1).
+		Render(focusedScript.Config.NameAlias)
+	inner = append(inner, "Editing:  "+scriptChip)
+	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#1e293b")).Render(strings.Repeat("─", 52)))
 	inner = append(inner, "")
 
-	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render("Cron Expression (e.g., */5 * * * *):"))
-	cronStr := m.envInputs[0].View()
-	var styledCron string
+	focusedBorder := lipgloss.Color("#6366f1")
+	blurBorder := lipgloss.Color("#1e293b")
+
+	// Cron field
+	inner = append(inner, labelStyle.Render("Cron schedule  (e.g. */5 * * * *)"))
+	cronBorder := blurBorder
 	if m.focusedEnv == 0 {
-		styledCron = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#00ffd7")).Width(50).Render(cronStr)
-	} else {
-		styledCron = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#3e3d32")).Width(50).Render(cronStr)
+		cronBorder = focusedBorder
 	}
-	for _, line := range strings.Split(styledCron, "\n") {
-		if line != "" {
-			inner = append(inner, line)
+	styledCron := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(cronBorder).Width(52).Render(m.envInputs[0].View())
+	for _, l := range strings.Split(styledCron, "\n") {
+		if l != "" {
+			inner = append(inner, l)
 		}
 	}
 	inner = append(inner, "")
 
-	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render("Environment Variables (up to 5 key-value pairs):"))
-
+	// Env vars
+	inner = append(inner, labelStyle.Render("Environment variables  (up to 5 key=value pairs)"))
+	inner = append(inner, "")
 	for i := 1; i < 11; i += 2 {
-		keyInput := m.envInputs[i].View()
-		valInput := m.envInputs[i+1].View()
+		pairNum := (i / 2) + 1
+		inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render(fmt.Sprintf("Pair %d", pairNum)))
 
-		var styledKey, styledVal string
+		kBorder, vBorder := blurBorder, blurBorder
 		if m.focusedEnv == i {
-			styledKey = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#00ffd7")).Width(22).Render(keyInput)
-		} else {
-			styledKey = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#3e3d32")).Width(22).Render(keyInput)
+			kBorder = focusedBorder
 		}
-
 		if m.focusedEnv == i+1 {
-			styledVal = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#00ffd7")).Width(22).Render(valInput)
-		} else {
-			styledVal = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#3e3d32")).Width(22).Render(valInput)
+			vBorder = focusedBorder
 		}
+		styledKey := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(kBorder).Width(23).Render(m.envInputs[i].View())
+		styledVal := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(vBorder).Width(23).Render(m.envInputs[i+1].View())
 
-		keyLines := strings.Split(styledKey, "\n")
-		valLines := strings.Split(styledVal, "\n")
-
-		for j := 0; j < len(keyLines); j++ {
-			if j < len(valLines) && keyLines[j] != "" && valLines[j] != "" {
-				inner = append(inner, fmt.Sprintf("%s   %s", keyLines[j], valLines[j]))
+		kLines := strings.Split(styledKey, "\n")
+		vLines := strings.Split(styledVal, "\n")
+		for j := 0; j < len(kLines); j++ {
+			if j < len(vLines) && kLines[j] != "" && vLines[j] != "" {
+				inner = append(inner, kLines[j]+"  "+vLines[j])
 			}
 		}
 	}
 	inner = append(inner, "")
 
-	saveBtn := " [ Save ] "
-	cancelBtn := " [ Cancel ] "
+	saveBg := lipgloss.NewStyle().Background(lipgloss.Color("#1e293b")).Foreground(lipgloss.Color("#475569")).Padding(0, 2).Render("Save")
+	cancelBg := lipgloss.NewStyle().Background(lipgloss.Color("#1e293b")).Foreground(lipgloss.Color("#475569")).Padding(0, 2).Render("Cancel")
 	if m.focusedEnv == 11 {
-		saveBtn = lipgloss.NewStyle().Background(lipgloss.Color("#00ffd7")).Foreground(lipgloss.Color("#000000")).Bold(true).Render(" [ Save ] ")
-	} else if m.focusedEnv == 12 {
-		cancelBtn = lipgloss.NewStyle().Background(lipgloss.Color("#ff007f")).Foreground(lipgloss.Color("#000000")).Bold(true).Render(" [ Cancel ] ")
+		saveBg = lipgloss.NewStyle().Background(lipgloss.Color("#6366f1")).Foreground(lipgloss.Color("#ffffff")).Bold(true).Padding(0, 2).Render("Save")
 	}
+	if m.focusedEnv == 12 {
+		cancelBg = lipgloss.NewStyle().Background(lipgloss.Color("#f43f5e")).Foreground(lipgloss.Color("#ffffff")).Bold(true).Padding(0, 2).Render("Cancel")
+	}
+	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render("─────────────────────────────────────────────────────"))
+	inner = append(inner, "  "+saveBg+"    "+cancelBg)
 
-	inner = append(inner, fmt.Sprintf("             %s     %s", saveBtn, cancelBtn))
-	inner = append(inner, "")
-
-	return m.renderFramedBox(" Edit Script Environment & Schedule ", "#00ffd7", "#00ffd7", inner, 60)
+	return m.renderFramedBox("Edit Script Config", "#e2e8f0", "#6366f1", inner, 62)
 }
-
 func (m *model) renderDeleteConfirm() string {
 	var inner []string
+
+	script := m.scripts[m.cursor]
+	scriptChip := lipgloss.NewStyle().
+		Background(lipgloss.Color("#1e293b")).
+		Foreground(lipgloss.Color("#f43f5e")).
+		Bold(true).Padding(0, 1).
+		Render(script.Config.NameAlias)
+	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#f43f5e")).Bold(true).Render("⚠  Delete script:"))
+	inner = append(inner, "   "+scriptChip)
+	inner = append(inner, "")
+	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Render("This will remove the script from config and crontab."))
+	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render("This action cannot be undone."))
 	inner = append(inner, "")
 
-	focusedScript := m.scripts[m.cursor]
-	warningMsg := fmt.Sprintf("Are you sure you want to delete script '%s'?", focusedScript.Config.NameAlias)
-	inner = append(inner, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ff007f")).Render(warningMsg))
-	inner = append(inner, "")
-	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render("This action cannot be undone and will update crontab."))
-	inner = append(inner, "")
-
-	cancelBtn := " [ Cancel ] "
-	deleteBtn := " [ Delete ] "
+	cancelBg := lipgloss.NewStyle().Background(lipgloss.Color("#1e293b")).Foreground(lipgloss.Color("#94a3b8")).Padding(0, 2).Render("Cancel")
+	deleteBg := lipgloss.NewStyle().Background(lipgloss.Color("#1e293b")).Foreground(lipgloss.Color("#475569")).Padding(0, 2).Render("Delete")
 	if m.confirmDeleteFocused == 0 {
-		cancelBtn = lipgloss.NewStyle().Background(lipgloss.Color("#75715e")).Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(" [ Cancel ] ")
+		cancelBg = lipgloss.NewStyle().Background(lipgloss.Color("#334155")).Foreground(lipgloss.Color("#e2e8f0")).Bold(true).Padding(0, 2).Render("Cancel")
 	} else if m.confirmDeleteFocused == 1 {
-		deleteBtn = lipgloss.NewStyle().Background(lipgloss.Color("#f92672")).Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(" [ Delete ] ")
+		deleteBg = lipgloss.NewStyle().Background(lipgloss.Color("#f43f5e")).Foreground(lipgloss.Color("#ffffff")).Bold(true).Padding(0, 2).Render("Delete")
 	}
+	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#1e293b")).Render(strings.Repeat("─", 42)))
+	inner = append(inner, "  "+cancelBg+"    "+deleteBg)
 
-	inner = append(inner, fmt.Sprintf("         %s         %s", cancelBtn, deleteBtn))
-	inner = append(inner, "")
-
-	return m.renderFramedBox(" Delete Confirmation ", "#f92672", "#f92672", inner, 50)
+	return m.renderFramedBox("Confirm Delete", "#f43f5e", "#f43f5e", inner, 50)
 }
 
 func (m *model) renderHistory() string {
 	var inner []string
-	inner = append(inner, "")
 
-	focusedScript := m.scripts[m.cursor]
-	titleLabel := fmt.Sprintf("Run History for: %s", focusedScript.Config.NameAlias)
-	inner = append(inner, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00ffd7")).Render(titleLabel))
+	script := m.scripts[m.cursor]
+	scriptChip := lipgloss.NewStyle().
+		Background(lipgloss.Color("#1e293b")).
+		Foreground(lipgloss.Color("#818cf8")).
+		Bold(true).Padding(0, 1).
+		Render(script.Config.NameAlias)
+	inner = append(inner, "Run history for  "+scriptChip)
+	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#1e293b")).Render(strings.Repeat("─", 54)))
 	inner = append(inner, "")
 
 	if len(m.historyItems) == 0 {
-		inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render("No past runs found in output folder."))
+		inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Italic(true).Render("  No past runs found in the output folder."))
 		inner = append(inner, "")
 	} else {
 		maxVisible := 8
@@ -1956,247 +2018,109 @@ func (m *model) renderHistory() string {
 
 		for i := startIdx; i < endIdx; i++ {
 			item := m.historyItems[i]
-			cursor := "  "
+			cursorGlyph := "  "
 			if i == m.historyCursor {
-				cursor = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff007f")).Render("▶ ")
+				cursorGlyph = lipgloss.NewStyle().Foreground(lipgloss.Color("#6366f1")).Render("▶ ")
 			}
 
 			var badge string
 			switch item.State {
 			case "Success":
-				badge = badgeSuccess.Render("SUCCESS")
+				badge = badgeSuccess.Render(" ✓ SUCCESS ")
 			case "Failed":
-				badge = badgeFailed.Render("FAILED")
+				badge = badgeFailed.Render(" ✕ FAILED  ")
 			case "Stopped":
-				badge = badgeStopped.Render("STOPPED")
+				badge = badgeStopped.Render(" ⊘ STOPPED ")
 			case "Running":
-				badge = badgeRunning.Render("RUNNING")
+				badge = badgeRunning.Render(" ● RUNNING ")
 			default:
-				badge = badgeIdle.Render(item.State)
+				badge = badgeIdle.Render("   " + item.State + "   ")
 			}
 
-			timeStr := item.Timestamp.Format("2006-01-02 15:04:05")
-			itemText := fmt.Sprintf("%sTask #%-3d  %-10s  %s", cursor, item.TaskID, badge, lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render(timeStr))
+			timeStr := item.Timestamp.Format("2006-01-02  15:04")
+			taskNum := lipgloss.NewStyle().Foreground(lipgloss.Color("#e2e8f0")).Render(fmt.Sprintf("Task #%d", item.TaskID))
+			ts := lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render(timeStr)
+			itemText := cursorGlyph + taskNum + "   " + badge + "   " + ts
 			inner = append(inner, itemText)
 		}
 		inner = append(inner, "")
 	}
 
-	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#a6adc8")).Render("  Enter: Load Log  |  Esc: Cancel"))
-	inner = append(inner, "")
+	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#334155"))
+	hintKey := lipgloss.NewStyle().Background(lipgloss.Color("#1e293b")).Foreground(lipgloss.Color("#a5b4fc")).Bold(true).Padding(0, 1)
+	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#1e293b")).Render(strings.Repeat("─", 54)))
+	inner = append(inner, hintKey.Render("Enter")+hintStyle.Render(" load log")+"   "+hintKey.Render("Esc")+hintStyle.Render(" close"))
 
-	return m.renderFramedBox(" Execution History ", "#ff007f", "#ff007f", inner, 60)
-}
-
-func getLargeLogo() string {
-	logoLines := []string{
-		"  ██████  ▄████▄  ▄▄▄█████▓ ██▓    ",
-		"▒██    ▒ ▒██▀ ▀█  ▓  ██▒ ▓▒▓██▒    ",
-		"░ ▓██▄   ▒▓█    ▄ ▒ ▓██░ ▒░▒██░    ",
-		"  ▒   ██▒▒▓▓▄ ▄██▒░ ▓██▓ ░ ▒██░    ",
-		"▒██████▒▒▒ ▓███▀ ░  ▒██▒ ░ ░██████▒",
-		"▒ ▒▓▒ ▒ ░░ ░▒ ▒  ░  ▒ ░░   ░ ▒░▓  ░",
-		"░ ░▒  ░ ░  ░  ▒       ░    ░ ░ ▒  ░",
-		"░  ░  ░  ░          ░        ░ ░   ",
-		"      ░  ░ ░                   ░  ░",
-		"         ░                         ",
-	}
-	colors := []string{
-		"#ff007f",
-		"#eb1097",
-		"#d720af",
-		"#c330c7",
-		"#af40df",
-		"#9b50f7",
-		"#707eff",
-		"#45acff",
-		"#1ad9ff",
-		"#00ffd7",
-	}
-
-	var sb strings.Builder
-	for i, line := range logoLines {
-		style := lipgloss.NewStyle().Foreground(lipgloss.Color(colors[i%len(colors)]))
-		sb.WriteString(style.Render(line) + "\n")
-	}
-	return sb.String()
-}
-
-func (m *model) renderStats(width, height int) string {
-	runningCount := 0
-	successCount := 0
-	failedCount := 0
-	stoppedCount := 0
-	idleCount := 0
-	for _, s := range m.scripts {
-		switch s.State {
-		case "Running":
-			runningCount++
-		case "Success":
-			successCount++
-		case "Failed":
-			failedCount++
-		case "Stopped":
-			stoppedCount++
-		default:
-			idleCount++
-		}
-	}
-
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00ffd7"))
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#a6adc8"))
-	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#cdd6f4")).Bold(true)
-
-	runBadge := badgeRunning.Render(fmt.Sprintf("%d RUNNING", runningCount))
-	successBadge := badgeSuccess.Render(fmt.Sprintf("%d OK", successCount))
-	failBadge := badgeFailed.Render(fmt.Sprintf("%d FAIL", failedCount))
-
-	var modeStr string
-	if m.parallelMode {
-		modeStr = lipgloss.NewStyle().Foreground(lipgloss.Color("#ae81ff")).Bold(true).Render("PARALLEL")
-	} else {
-		modeStr = lipgloss.NewStyle().Foreground(lipgloss.Color("#f4bf75")).Bold(true).Render("SEQUENTIAL")
-	}
-
-	configPath := GetConfigPath()
-	if len(configPath) > 20 {
-		configPath = "..." + configPath[len(configPath)-17:]
-	}
-
-	content := fmt.Sprintf(
-		"  %s\n\n"+
-			"  %s %s\n"+
-			"  %s %s\n"+
-			"  %s %s\n"+
-			"  %s %s %s\n"+
-			"  %s %s",
-		headerStyle.Render("📊 SCRIPT DASHBOARD"),
-		labelStyle.Render("Mode:   "), modeStr,
-		labelStyle.Render("Config: "), valueStyle.Render(configPath),
-		labelStyle.Render("Scripts:"), valueStyle.Render(fmt.Sprintf("%d loaded", len(m.scripts))),
-		labelStyle.Render("Tasks:  "), runBadge, successBadge,
-		labelStyle.Render("        "), failBadge,
-	)
-
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#3c3836")).
-		Padding(0, 1).
-		Width(width).
-		Height(height)
-
-	return borderStyle.Render(content)
-}
-
-func (m *model) renderMediumHeader(width int) string {
-	logo := lipgloss.NewStyle().Foreground(lipgloss.Color("#ff007f")).Render("█▀█ █▀▄ █▀ █▀▀ ▀█▀ █  ") + "\n" +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#00ffd7")).Render("█▄█ █▄▀ ▄█ █▄▄  █  █▄▄")
-
-	runningCount := 0
-	for _, s := range m.scripts {
-		if s.State == "Running" {
-			runningCount++
-		}
-	}
-
-	activeStr := ""
-	if runningCount > 0 {
-		activeStr = lipgloss.NewStyle().Foreground(lipgloss.Color("#00ffd7")).Bold(true).Render(fmt.Sprintf("● RUNNING: %d", runningCount))
-	} else {
-		activeStr = lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render("○ IDLE")
-	}
-
-	modeStr := ""
-	if m.parallelMode {
-		modeStr = lipgloss.NewStyle().Foreground(lipgloss.Color("#ae81ff")).Bold(true).Render("PARALLEL")
-	} else {
-		modeStr = lipgloss.NewStyle().Foreground(lipgloss.Color("#f4bf75")).Bold(true).Render("SEQUENTIAL")
-	}
-
-	info := fmt.Sprintf(
-		"⚡ %s  |  Mode: %s  |  %s",
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#a6adc8")).Render("SCRIPT RUNNER"),
-		modeStr,
-		activeStr,
-	)
-
-	spaces := width - 22 - lipgloss.Width(info) - 4
-	if spaces < 1 {
-		spaces = 1
-	}
-
-	rightSide := strings.Repeat(" ", spaces) + info
-
-	logoLines := strings.Split(logo, "\n")
-
-	headerLine1 := logoLines[0] + rightSide
-	headerLine2 := logoLines[1] + strings.Repeat(" ", spaces) + lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render("Config: "+GetConfigPath())
-
-	border := lipgloss.NewStyle().Foreground(lipgloss.Color("#2c2c2c")).Render(strings.Repeat("━", width))
-
-	return "\n  " + headerLine1 + "\n  " + headerLine2 + "\n" + border
-}
-
-func (m *model) renderCompactHeader(width int) string {
-	titleStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("#ff007f")).
-		Foreground(lipgloss.Color("#000000")).
-		Bold(true).
-		Padding(0, 1)
-
-	subtitleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#00ffd7")).
-		Bold(true)
-
-	metaStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#75715e"))
-
-	leftText := titleStyle.Render("⚡ SCTL") + " " + subtitleStyle.Render("SCRIPT RUNNER")
-
-	runningCount := 0
-	for _, s := range m.scripts {
-		if s.State == "Running" {
-			runningCount++
-		}
-	}
-
-	activeStr := ""
-	if runningCount > 0 {
-		activeStr = lipgloss.NewStyle().Foreground(lipgloss.Color("#00ffd7")).Bold(true).Render(fmt.Sprintf("● RUNNING: %d", runningCount))
-	} else {
-		activeStr = lipgloss.NewStyle().Foreground(lipgloss.Color("#75715e")).Render("○ IDLE")
-	}
-
-	rightText := fmt.Sprintf("%s | %s", time.Now().Format("15:04:05"), activeStr)
-	rightTextFormatted := metaStyle.Render(rightText)
-
-	leftLen := lipgloss.Width(leftText)
-	rightLen := lipgloss.Width(rightTextFormatted)
-
-	spaces := width - leftLen - rightLen - 4
-	if spaces < 1 {
-		spaces = 1
-	}
-
-	headerContent := "  " + leftText + strings.Repeat(" ", spaces) + rightTextFormatted + "  "
-	border := lipgloss.NewStyle().Foreground(lipgloss.Color("#2c2c2c")).Render(strings.Repeat("─", width))
-
-	return "\n" + headerContent + "\n" + border
+	return m.renderFramedBox("Execution History", "#e2e8f0", "#6366f1", inner, 62)
 }
 
 func (m *model) renderHeader(width int) string {
-	if m.height >= 32 && m.width >= 105 {
-		logo := getLargeLogo()
-		stats := m.renderStats(45, 9)
+	// Brand pill
+	brand := lipgloss.NewStyle().
+		Background(lipgloss.Color("#4f46e5")).
+		Foreground(lipgloss.Color("#ffffff")).
+		Bold(true).
+		Padding(0, 2).
+		Render("SCTL")
+	tagline := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#6366f1")).
+		Bold(true).
+		Render(" Script Controller")
 
-		combined := lipgloss.JoinHorizontal(lipgloss.Top, logo, "      ", stats)
-		border := lipgloss.NewStyle().Foreground(lipgloss.Color("#2c2c2c")).Render(strings.Repeat("━", width))
-		return "\n" + combined + "\n" + border
+	// Live stats
+	running, okCount, failed := 0, 0, 0
+	for _, s := range m.scripts {
+		switch s.State {
+		case "Running":
+			running++
+		case "Success":
+			okCount++
+		case "Failed":
+			failed++
+		}
 	}
-	if m.height >= 25 && m.width >= 80 {
-		return m.renderMediumHeader(width)
+	pipeSep := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e293b")).Render("  │  ")
+	var chips []string
+	chips = append(chips, lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Render(fmt.Sprintf("%d scripts", len(m.scripts))))
+	if running > 0 {
+		chips = append(chips, lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981")).Bold(true).Render(fmt.Sprintf("\u25cf %d running", running)))
 	}
-	return m.renderCompactHeader(width)
+	if okCount > 0 {
+		chips = append(chips, lipgloss.NewStyle().Foreground(lipgloss.Color("#059669")).Render(fmt.Sprintf("\u2713 %d ok", okCount)))
+	}
+	if failed > 0 {
+		chips = append(chips, lipgloss.NewStyle().Foreground(lipgloss.Color("#f43f5e")).Bold(true).Render(fmt.Sprintf("\u2715 %d failed", failed)))
+	}
+	statsStr := strings.Join(chips, pipeSep)
+
+	// Mode chip
+	modeTxt, modeFg := "SEQUENTIAL", "#f59e0b"
+	if m.parallelMode {
+		modeTxt, modeFg = "PARALLEL", "#818cf8"
+	}
+	modeChip := lipgloss.NewStyle().
+		Background(lipgloss.Color("#1e293b")).
+		Foreground(lipgloss.Color(modeFg)).
+		Bold(true).Padding(0, 1).Render(modeTxt)
+
+	// Config + clock
+	cfgPath := GetConfigPath()
+	if len(cfgPath) > 28 {
+		cfgPath = "\u2026" + cfgPath[len(cfgPath)-25:]
+	}
+	meta := lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).
+		Render(cfgPath + "  " + time.Now().Format("15:04"))
+
+	leftSide := brand + tagline
+	rightSide := statsStr + pipeSep + modeChip + pipeSep + meta
+
+	sp := width - lipgloss.Width(leftSide) - lipgloss.Width(rightSide) - 4
+	if sp < 1 {
+		sp = 1
+	}
+	line := "  " + leftSide + strings.Repeat(" ", sp) + rightSide
+	rule := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e293b")).Render(strings.Repeat("\u2501", width))
+	return "\n" + line + "\n" + rule
 }
 
 func (m *model) View() string {
@@ -2323,7 +2247,7 @@ func printHelp() {
 		Render("by github/codewithyagnesh")
 
 	fmt.Println()
-	fmt.Print(getLargeLogo())
+	fmt.Print(lipgloss.NewStyle().Foreground(lipgloss.Color("#6366f1")).Bold(true).Render("  SCTL — Script Controller") + "\n")
 	fmt.Println()
 	fmt.Printf("  %s  %s  %s\n", titleStyle.Render("sctl (Script Controller)"), versionBadge, authorLabel)
 	fmt.Printf("  %s\n", descStyle.Render("Modern, elegant task automation dashboard & scheduler"))
