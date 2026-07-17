@@ -29,17 +29,45 @@
 ## Installation 📦
 
 ### 1. Fast Installer (Recommended)
-Install `sctl` to `/usr/local/bin` (or `~/.local/bin` if `/usr/local/bin` is not writable) with a single command:
+Install the **latest** `sctl` release to `/usr/local/bin` (or `~/.local/bin` if `/usr/local/bin` is not writable) with a single command:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/CodeWithYagnesh/sctl/refs/heads/main/install.sh | sh
+```
+
+#### Install a Specific Version
+You can pin the installer to an exact release using either a CLI argument or the `VERSION` environment variable:
+
+```bash
+# Pass the version as an argument (recommended when saving to a file first)
+./install.sh v1.0.8
+
+# Pass the version inline via the VERSION environment variable (pipe-friendly)
+curl -fsSL https://raw.githubusercontent.com/CodeWithYagnesh/sctl/refs/heads/main/install.sh | VERSION=v1.0.8 sh
+```
+
+> [!TIP]
+> The `v` prefix is optional — both `v1.0.8` and `1.0.8` are accepted. Browse all available releases at the [GitHub Releases page](https://github.com/CodeWithYagnesh/sctl/releases).
+
+#### Install to a Custom Directory
+Set the `BINDIR` environment variable to override the default install location:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CodeWithYagnesh/sctl/refs/heads/main/install.sh | BINDIR=$HOME/bin sh
+
+# Or for a specific version to a custom directory
+curl -fsSL https://raw.githubusercontent.com/CodeWithYagnesh/sctl/refs/heads/main/install.sh | VERSION=v1.0.8 BINDIR=$HOME/bin sh
 ```
 
 ### 2. Install via Go
 If you have Go installed on your system, you can build and install the binary directly:
 
 ```bash
+# Latest version
 go install github.com/CodeWithYagnesh/sctl@latest
+
+# Specific version
+go install github.com/CodeWithYagnesh/sctl@v1.0.8
 ```
 
 ### 3. Uninstall

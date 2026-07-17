@@ -180,6 +180,7 @@ if [ -z "${BINDIR}" ]; then
   fi
 else
   USE_SUDO="false"
+  mkdir -p "${BINDIR}"
 fi
 
 info "Installing to ${BOLD}${BINDIR}${NC}"
@@ -242,6 +243,5 @@ printf "  Restart your terminal, then run:\n"
 printf "    ${BOLD}sctl --help${NC}\n"
 printf "\n"
 printf "  To upgrade later:\n"
-printf "    ${BOLD}sctl upgrade${NC}            # latest\n"
 printf "    ${BOLD}./install.sh v1.0.8${NC}     # specific version\n"
 printf "\n"
