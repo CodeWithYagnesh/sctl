@@ -94,6 +94,14 @@ export SCTL_CONFIG="$HOME/.config/sctl/config.yaml"
 ### Example `config.yaml`
 
 ```yaml
+theme:
+  name: monokai
+  accent: "#66d9ef"
+  success: "#a6e22e"
+  fail: "#f92672"
+  stopped: "#fd971f"
+  idle: "#49483e"
+
 scripts:
   - name_alias: system_check
     description: Run automated system health checks
@@ -120,6 +128,12 @@ scripts:
 | `output_folder_path` | String | Directory where run records (`task_<id>.yaml`) will be saved. |
 | `input` | Map | Environment variables supplied to the script execution environment. |
 | `cron` | String | *(Optional)* Standard cron expression to schedule automatic headless executions. |
+| `theme.name` | String | *(Optional)* Built-in theme preset such as `default`, `monokai`, `catppuccin`, or `nord`. |
+| `theme.accent` | String | *(Optional)* Accent color used for focus states and active UI. |
+| `theme.success` | String | *(Optional)* Success badge color. |
+| `theme.fail` | String | *(Optional)* Failure badge color. |
+| `theme.stopped` | String | *(Optional)* Stopped badge color. |
+| `theme.idle` | String | *(Optional)* Idle/neutral border and background color. |
 
 > [!IMPORTANT]
 > **Unique Output Folders Required:** Each script configured in `sctl` **MUST** have a unique `output_folder_path`. Since task files (`task_<id>.yaml`) and HTML reports are scanned and loaded from this directory, using the same output directory across multiple scripts will cause task IDs and log/HTML records to conflict.
@@ -168,6 +182,7 @@ sctl
 | `h` / `H` | View task execution history and load past logs |
 | `p` | Toggle parallel execution mode (runs checked scripts concurrently or sequentially) |
 | `o` | Open the latest HTML report/output file in the system default web browser |
+| `t` | Cycle through built-in theme presets and persist the selection to config |
 | `[` / `]` | Scroll logs page up / page down |
 | `q` / `Ctrl+C` | Quit `sctl` (terminating all active background tasks started in this session) |
 

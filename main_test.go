@@ -361,6 +361,40 @@ func TestSubmitEnvForm(t *testing.T) {
 	}
 }
 
+func TestThemeCyclePersists(t *testing.T) {
+	oldEnv := os.Getenv("SCTL_CONFIG")
+	defer os.Setenv("SCTL_CONFIG", oldEnv)
+
+	tmpFile, err := os.CreateTemp("", "sctl_test_theme_*.yaml")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	tmpPath := tmpFile.Name()
+	tmpFile.Close()
+	defer os.Remove(tmpPath)
+	os.Setenv("SCTL_CONFIG", tmpPath)
+
+	cfg := &Config{Scripts: []ScriptConfig{{NameAlias: "hello", Command: "echo hi"}}}
+	m := &model{config: cfg, scripts: []ScriptState{{Config: cfg.Scripts[0]}}}
+
+	m.cycleTheme()
+
+	if m.config.Theme.Name != "monokai" {
+		t.Fatalf("expected theme name 'monokai', got %q", m.config.Theme.Name)
+	}
+	if activeTheme.Accent != "#66d9ef" {
+		t.Fatalf("expected accent color '#66d9ef', got %q", activeTheme.Accent)
+	}
+
+	data, err := os.ReadFile(tmpPath)
+	if err != nil {
+		t.Fatalf("failed to read persisted config: %v", err)
+	}
+	if !strings.Contains(string(data), "name: monokai") {
+		t.Fatalf("expected persisted config to include theme name, got:\n%s", string(data))
+	}
+}
+
 func TestDeleteScript(t *testing.T) {
 	m := &model{
 		cursor: 1,
