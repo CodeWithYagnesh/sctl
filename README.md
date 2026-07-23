@@ -15,7 +15,7 @@
 
 ## Features ✨
 
-- **Interactive TUI**: Built with Bubble Tea & Lipgloss, featuring full viewport scrolling for logs, beautiful status badges, and real-time execution progress bars.
+- **Interactive TUI**: Built with Bubble Tea & Lipgloss, featuring full viewport scrolling for logs, beautiful status badges, real-time execution progress bars, and a live execution status strip with spinner and elapsed time.
 - **Dual-Mode Execution**:
   - **TUI Dashboard**: Trigger tasks manually, configure parameters, delete scripts, or stop processes interactively.
   - **Headless Mode**: Execute scripts directly via CLI command line (e.g. `sctl --run <alias>`) with live output streaming to stdout, perfect for background automation.
@@ -116,6 +116,11 @@ scripts:
     input:
       DB_NAME: "production"
       COMPRESSION_LEVEL: "9"
+
+  - name_alias: large_log_test
+    description: Generates a very large log stream for GUI stress testing
+    command: for i in $(seq 1 400); do echo "log line $i / 400"; done
+    output_folder_path: ./output/large_log_test
 ```
 
 ### Configuration Fields
@@ -167,6 +172,8 @@ sctl
 ```
 
 #### TUI Keyboard Shortcuts ⌨️
+
+While a task is running, the right-hand output panel shows a live status strip with a spinner, current state, and elapsed runtime so you can quickly gauge progress without leaving the dashboard.
 
 | Key | Action |
 |---|---|

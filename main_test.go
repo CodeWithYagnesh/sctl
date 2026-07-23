@@ -189,6 +189,41 @@ func TestStartTaskExecution(t *testing.T) {
 	}
 }
 
+func TestPrepareViewportLogs(t *testing.T) {
+	logs := strings.Join([]string{"line 1", "line 2", "line 3"}, "\n")
+	got := prepareViewportLogs(logs, 0)
+	if got != logs {
+		t.Fatalf("expected logs to stay unchanged, got %q", got)
+	}
+
+	var longLines []string
+	for i := 0; i < 360; i++ {
+		longLines = append(longLines, fmt.Sprintf("line %d", i))
+	}
+	longLogs := strings.Join(longLines, "\n")
+	got = prepareViewportLogs(longLogs, 0)
+	if !strings.Contains(got, "[truncated: showing the last 350 lines for performance]") {
+		t.Fatalf("expected truncation notice, got %q", got)
+	}
+	if !strings.Contains(got, "line 359") {
+		t.Fatalf("expected tail content to be preserved, got %q", got)
+	}
+}
+
+func TestFormatExecutionStatus(t *testing.T) {
+	startedAt := time.Now().Add(-125 * time.Second)
+	got := formatExecutionStatus("Running", startedAt, time.Time{}, 3)
+	if !strings.Contains(got, "RUNNING") {
+		t.Fatalf("expected running status, got %q", got)
+	}
+	if !strings.Contains(got, "⏱") {
+		t.Fatalf("expected elapsed-time marker, got %q", got)
+	}
+	if !strings.Contains(got, "02:05") {
+		t.Fatalf("expected elapsed duration 02:05, got %q", got)
+	}
+}
+
 func TestInterpretCarriageReturns(t *testing.T) {
 	tests := []struct {
 		input    string
