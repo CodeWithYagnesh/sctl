@@ -42,40 +42,61 @@ func (m *model) renderLeftPanel(width, height int) string {
 		borderStyle = focusedStyle
 	}
 
-	titleTxt := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e2e8f0")).Render("SCRIPTS")
 	indices := m.filteredIndices()
+	cursorPos := 0
+	for pos, idx := range indices {
+		if idx == m.cursor {
+			cursorPos = pos
+			break
+		}
+	}
+
+	availW := width - 8
+	if availW < 10 {
+		availW = 10
+	}
+
+	titleTxt := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e2e8f0")).Render("SCRIPTS")
 	countStr := fmt.Sprintf("%d", len(m.scripts))
-	if m.filterQuery != "" {
-		countStr = fmt.Sprintf("%d/%d", len(indices), len(m.scripts))
+	if len(indices) > 0 {
+		if m.filterQuery != "" {
+			countStr = fmt.Sprintf("%d/%d", len(indices), len(m.scripts))
+		} else if len(indices) > 1 {
+			countStr = fmt.Sprintf("%d/%d", cursorPos+1, len(indices))
+		}
 	}
 	countChip := lipgloss.NewStyle().
 		Background(lipgloss.Color("#1e293b")).
 		Foreground(lipgloss.Color("#64748b")).
 		Padding(0, 1).
 		Render(countStr)
+
 	hint := lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render("Space·select  R·run")
 	if m.filterQuery != "" {
 		hint = lipgloss.NewStyle().Foreground(lipgloss.Color("#6366f1")).Render("/") +
 			lipgloss.NewStyle().Foreground(lipgloss.Color("#94a3b8")).Render(m.filterQuery) +
 			lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render("  Esc·clear")
 	}
+
 	titleLeft := titleTxt + " " + countChip
-	availW := width - 8
 	sp := availW - lipgloss.Width(titleLeft) - lipgloss.Width(hint)
 	if sp < 1 {
 		sp = 1
 	}
 	s.WriteString(titleLeft + strings.Repeat(" ", sp) + hint + "\n")
 
+	headerLines := 2
 	if m.activeView == "filter" {
 		barStyle := lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).
 			BorderForeground(lipgloss.Color("#6366f1")).
 			Width(availW - 2)
 		prompt := lipgloss.NewStyle().Foreground(lipgloss.Color("#6366f1")).Bold(true).Render("/") + " "
-		for _, l := range strings.Split(barStyle.Render(prompt+m.filterInput.View()), "\n") {
+		filterLines := strings.Split(barStyle.Render(prompt+m.filterInput.View()), "\n")
+		for _, l := range filterLines {
 			if l != "" {
 				s.WriteString(l + "\n")
+				headerLines++
 			}
 		}
 	}
@@ -86,20 +107,65 @@ func (m *model) renderLeftPanel(width, height int) string {
 	if len(m.scripts) == 0 {
 		s.WriteString("\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Italic(true).
 			Render("  No scripts configured. Press A to add one.") + "\n")
+		return borderStyle.Width(width - 4).Height(height - 2).Render(s.String())
 	} else if len(indices) == 0 && m.filterQuery != "" {
 		s.WriteString("\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Italic(true).
 			Render(fmt.Sprintf("  No match for %q", m.filterQuery)) + "\n")
+		return borderStyle.Width(width - 4).Height(height - 2).Render(s.String())
 	}
 
-	visible := make(map[int]bool, len(indices))
-	for _, idx := range indices {
-		visible[idx] = true
+	// Calculate max cards that can fit vertically
+	availH := height - 2 // outer border consumes 2 lines
+	cardsAreaHeight := availH - headerLines
+	if cardsAreaHeight < 5 {
+		cardsAreaHeight = 5
 	}
 
-	for i, script := range m.scripts {
-		if !visible[i] {
-			continue
-		}
+	// Each card takes 5 lines + 1 line gap (6 lines total)
+	cardCost := 5
+	gapCost := 1
+	cardTotalHeight := cardCost + gapCost
+
+	// Reserve space for scroll hints if needed (2 lines total: 1 top, 1 bottom)
+	usableHeight := cardsAreaHeight - 2
+	if usableHeight < cardCost {
+		usableHeight = cardCost
+	}
+	maxCards := usableHeight / cardTotalHeight
+	if maxCards < 1 {
+		maxCards = 1
+	}
+
+	// Adjust m.listOffset to ensure cursorPos is visible
+	if cursorPos < m.listOffset {
+		m.listOffset = cursorPos
+	} else if cursorPos >= m.listOffset+maxCards {
+		m.listOffset = cursorPos - maxCards + 1
+	}
+	if m.listOffset > len(indices)-maxCards {
+		m.listOffset = len(indices) - maxCards
+	}
+	if m.listOffset < 0 {
+		m.listOffset = 0
+	}
+
+	endIdx := m.listOffset + maxCards
+	if endIdx > len(indices) {
+		endIdx = len(indices)
+	}
+
+	// Top overflow indicator
+	if m.listOffset > 0 {
+		moreAbove := m.listOffset
+		topHint := lipgloss.NewStyle().Foreground(lipgloss.Color("#6366f1")).Italic(true).
+			Render(fmt.Sprintf("  ▲ %d script(s) above...", moreAbove))
+		s.WriteString(topHint + "\n")
+	}
+
+	// Render visible script cards
+	for pos := m.listOffset; pos < endIdx; pos++ {
+		i := indices[pos]
+		script := m.scripts[i]
 		isSelected := i == m.cursor
 
 		cursorGlyph := "  "
@@ -179,7 +245,16 @@ func (m *model) renderLeftPanel(width, height int) string {
 			BorderForeground(cardBorderColor).
 			Padding(0, 1).
 			Width(availW)
+
 		s.WriteString(cardStyle.Render(cardContent) + "\n")
+	}
+
+	// Bottom overflow indicator
+	if endIdx < len(indices) {
+		moreBelow := len(indices) - endIdx
+		botHint := lipgloss.NewStyle().Foreground(lipgloss.Color("#6366f1")).Italic(true).
+			Render(fmt.Sprintf("  ▼ %d script(s) below...", moreBelow))
+		s.WriteString(botHint + "\n")
 	}
 
 	return borderStyle.Width(width - 4).Height(height - 2).Render(s.String())
@@ -223,9 +298,13 @@ func (m *model) renderRightPanel(width, height int) string {
 	statusLine := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#64748b")).
 		Render(formatExecutionStatus(script.State, script.StartedAt, script.FinishedAt, script.Progress))
-
 	breadcrumb := titleLabel + sep + scriptLabel + taskLabel
-	availW := width - 4
+	availW := width - 8
+	if availW < 10 {
+		availW = 10
+	}
+	m.viewport.Width = availW
+
 	sp := availW - lipgloss.Width(breadcrumb) - lipgloss.Width(statusLine) - lipgloss.Width(scrollChip)
 	if sp < 1 {
 		sp = 1

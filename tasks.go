@@ -121,7 +121,12 @@ func StartTask(nameAlias string, command string, folderPath string, input map[st
 	cmd := exec.Command("bash", "-c", command)
 	prepareCmd(cmd)
 	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, fmt.Sprintf("SCTL_TASK_ID=%d", taskID))
+	cmd.Env = append(cmd.Env,
+		fmt.Sprintf("SCTL_TASK_ID=%d", taskID),
+		"PYTHONUNBUFFERED=1",
+		"FORCE_COLOR=1",
+		"TERM=xterm-256color",
+	)
 	for k, v := range input {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%v", k, v))
 	}
@@ -205,19 +210,40 @@ func StartTask(nameAlias string, command string, folderPath string, input map[st
 	go func() {
 		defer wg.Done()
 		reader := bufio.NewReader(r)
+		var lineBuf strings.Builder
+		var lastWasCR bool
+
+		emitLine := func(s string) {
+			s = strings.TrimSuffix(s, "\r")
+			processLine(s)
+		}
+
 		for {
-			line, err := reader.ReadString('\n')
+			b, err := reader.ReadByte()
 			if err != nil {
-				if len(line) > 0 {
-					line = strings.TrimSuffix(line, "\n")
-					line = strings.TrimSuffix(line, "\r")
-					processLine(line)
+				if lineBuf.Len() > 0 {
+					emitLine(lineBuf.String())
+					lineBuf.Reset()
 				}
 				break
 			}
-			line = strings.TrimSuffix(line, "\n")
-			line = strings.TrimSuffix(line, "\r")
-			processLine(line)
+
+			if b == '\r' {
+				if lineBuf.Len() > 0 {
+					emitLine(lineBuf.String())
+					lineBuf.Reset()
+				}
+				lastWasCR = true
+			} else if b == '\n' {
+				if !lastWasCR {
+					emitLine(lineBuf.String())
+					lineBuf.Reset()
+				}
+				lastWasCR = false
+			} else {
+				lastWasCR = false
+				lineBuf.WriteByte(b)
+			}
 		}
 		r.Close()
 	}()

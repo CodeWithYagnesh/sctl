@@ -119,6 +119,8 @@ type model struct {
 	// filterQuery is the current live search string; empty means no filter.
 	filterQuery string
 	filterInput textinput.Model
+	// listOffset is the top visible index for script card list windowing in renderLeftPanel.
+	listOffset  int
 	theme       ThemeConfig
 }
 

@@ -173,10 +173,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		leftWidth := int(float64(m.width) * 0.4)
+		leftWidth := int(float64(m.width) * 0.42)
 		rightWidth := m.width - leftWidth
 
-		m.viewport.Width = rightWidth - 4
+		vWidth := rightWidth - 8
+		if vWidth < 10 {
+			vWidth = 10
+		}
+		m.viewport.Width = vWidth
 		m.updateViewport()
 
 	case TaskStartedMsg:
@@ -187,6 +191,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.scripts[i].State = "Running"
 				m.scripts[i].StartedAt = time.Now()
 				m.scripts[i].FinishedAt = time.Time{}
+				m.scripts[i].Logs = ""
+				m.scripts[i].Progress = 0
 				if i == m.cursor {
 					m.updateViewport()
 				}
