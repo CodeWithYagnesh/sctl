@@ -486,3 +486,79 @@ func TestDeleteScript(t *testing.T) {
 		t.Errorf("expected remaining script to be hello_1, got %s", m.scripts[0].Config.NameAlias)
 	}
 }
+
+func TestDeleteScriptByAlias(t *testing.T) {
+	m := &model{
+		cursor: 0,
+		config: &Config{
+			Scripts: []ScriptConfig{
+				{NameAlias: "alpha", Command: "echo alpha"},
+				{NameAlias: "beta", Command: "echo beta"},
+			},
+		},
+		scripts: []ScriptState{
+			{Config: ScriptConfig{NameAlias: "alpha", Command: "echo alpha"}},
+			{Config: ScriptConfig{NameAlias: "beta", Command: "echo beta"}},
+		},
+	}
+
+	oldEnv := os.Getenv("SCTL_CONFIG")
+	defer os.Setenv("SCTL_CONFIG", oldEnv)
+
+	tmpFile, err := os.CreateTemp("", "sctl_test_delete_alias_*.yaml")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	tmpPath := tmpFile.Name()
+	tmpFile.Close()
+	defer os.Remove(tmpPath)
+	os.Setenv("SCTL_CONFIG", tmpPath)
+
+	if !m.deleteScriptByAlias("beta") {
+		t.Fatalf("expected alias-based deletion to succeed")
+	}
+	if len(m.config.Scripts) != 1 || m.config.Scripts[0].NameAlias != "alpha" {
+		t.Fatalf("expected config to keep only alpha, got %#v", m.config.Scripts)
+	}
+	if len(m.scripts) != 1 || m.scripts[0].Config.NameAlias != "alpha" {
+		t.Fatalf("expected scripts slice to keep only alpha, got %#v", m.scripts)
+	}
+}
+
+func TestSaveScriptConfigByAlias(t *testing.T) {
+	m := &model{
+		config: &Config{Scripts: []ScriptConfig{{NameAlias: "alpha", Command: "echo alpha", OutputFolderPath: "./out"}}},
+		scripts: []ScriptState{{Config: ScriptConfig{NameAlias: "alpha", Command: "echo alpha", OutputFolderPath: "./out"}}},
+	}
+
+	oldEnv := os.Getenv("SCTL_CONFIG")
+	defer os.Setenv("SCTL_CONFIG", oldEnv)
+
+	tmpFile, err := os.CreateTemp("", "sctl_test_update_alias_*.yaml")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	tmpPath := tmpFile.Name()
+	tmpFile.Close()
+	defer os.Remove(tmpPath)
+	os.Setenv("SCTL_CONFIG", tmpPath)
+
+	updated := ScriptConfig{
+		NameAlias:        "alpha",
+		Description:      "Updated desc",
+		Command:          "echo updated",
+		OutputFolderPath: "./out2",
+		Cron:             "*/5 * * * *",
+		Input:            map[string]interface{}{"env": "value"},
+	}
+
+	if !m.saveScriptConfigByAlias("alpha", updated) {
+		t.Fatalf("expected alias-based save to succeed")
+	}
+	if m.scripts[0].Config.Description != "Updated desc" {
+		t.Fatalf("expected description to update, got %q", m.scripts[0].Config.Description)
+	}
+	if m.config.Scripts[0].OutputFolderPath != "./out2" {
+		t.Fatalf("expected output folder update, got %q", m.config.Scripts[0].OutputFolderPath)
+	}
+}

@@ -168,6 +168,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.scripts) > 0 && m.cursor >= 0 && m.cursor < len(m.scripts) && m.scripts[m.cursor].State == "Running" {
 			m.updateViewport()
 		}
+		dashboardBroadcast()
 		return m, tickCmd()
 
 	case tea.WindowSizeMsg:
@@ -182,6 +183,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.viewport.Width = vWidth
 		m.updateViewport()
+		dashboardBroadcast()
+		return m, nil
 
 	case TaskStartedMsg:
 		for i := range m.scripts {
@@ -201,6 +204,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.statusMsg = fmt.Sprintf("Started script: %s (Task %d)", msg.ScriptNameAlias, msg.TaskID)
 		m.statusMsgTime = time.Now()
+		dashboardBroadcast()
 		return m, nil
 
 	case TaskStartErrorMsg:
@@ -213,13 +217,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				if !m.parallelMode && i == m.runningIndex {
 					m.runningIndex = -1
-					return m, m.runNextSequentialCmd()
+					cmd := m.runNextSequentialCmd()
+					dashboardBroadcast()
+					return m, cmd
 				}
 				break
 			}
 		}
 		m.statusMsg = fmt.Sprintf("Error starting %s: %v", msg.ScriptNameAlias, msg.Error)
 		m.statusMsgTime = time.Now()
+		dashboardBroadcast()
 		return m, nil
 
 	case TaskUpdateMsg:
@@ -263,12 +270,73 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					if !m.parallelMode && i == m.runningIndex {
 						m.runningIndex = -1
-						return m, m.runNextSequentialCmd()
+						cmd := m.runNextSequentialCmd()
+						dashboardBroadcast()
+						return m, cmd
 					}
 				}
 				break
 			}
 		}
+		dashboardBroadcast()
+		return m, nil
+
+	case DashboardRunMsg:
+		if idx := m.findScriptIndexByAlias(msg.Alias); idx >= 0 {
+			cmd := m.runTaskCmd(idx)
+			dashboardBroadcast()
+			return m, cmd
+		}
+		dashboardBroadcast()
+		return m, nil
+	case DashboardStopMsg:
+		if idx := m.findScriptIndexByAlias(msg.Alias); idx >= 0 {
+			if m.scripts[idx].State == "Running" && m.scripts[idx].Cmd != nil {
+				_ = StopTask(m.scripts[idx].Cmd)
+			}
+		}
+		dashboardBroadcast()
+		return m, nil
+	case DashboardDeleteMsg:
+		m.deleteScriptByAlias(msg.Alias)
+		dashboardBroadcast()
+		return m, nil
+	case DashboardCreateMsg:
+		m.createScriptConfig(msg.Config)
+		dashboardBroadcast()
+		return m, nil
+	case DashboardEditMsg:
+		m.saveScriptConfigByAlias(msg.Alias, msg.Config)
+		dashboardBroadcast()
+		return m, nil
+	case DashboardEnvUpdateMsg:
+		m.updateEnvConfigByAlias(msg.Alias, msg.Cron, msg.Notify, msg.Input)
+		dashboardBroadcast()
+		return m, nil
+	case DashboardThemeMsg:
+		m.setTheme(msg.Theme)
+		dashboardBroadcast()
+		return m, nil
+	case DashboardRunBatchMsg:
+		cmds := make([]tea.Cmd, 0, len(msg.Aliases))
+		for _, alias := range msg.Aliases {
+			if idx := m.findScriptIndexByAlias(alias); idx >= 0 {
+				cmds = append(cmds, m.runTaskCmd(idx))
+			}
+		}
+		dashboardBroadcast()
+		if len(cmds) == 0 {
+			return m, nil
+		}
+		return m, tea.Batch(cmds...)
+	case DashboardQueryMsg:
+		if msg.Reply != nil {
+			select {
+			case msg.Reply <- m.buildDashboardSnapshot():
+			default:
+			}
+		}
+		return m, nil
 
 	case tea.KeyMsg:
 		key := msg.String()
@@ -628,70 +696,7 @@ func (m *model) submitForm() {
 	cronStr := strings.TrimSpace(m.formInputs[4].Value())
 	hostStr := strings.TrimSpace(m.formInputs[5].Value())
 
-	if alias == "" || cmdStr == "" || outputPath == "" {
-		m.statusMsg = "Error: Name, Command, and Output Path are required."
-		m.statusMsgTime = time.Now()
-		return
-	}
-	if cronStr != "" && !isValidCron(cronStr) {
-		m.statusMsg = "Error: Invalid cron format. Expected 5 space-separated fields."
-		m.statusMsgTime = time.Now()
-		return
-	}
-
-	if m.editingAlias != "" {
-		if alias != m.editingAlias {
-			for _, s := range m.scripts {
-				if s.Config.NameAlias == alias {
-					m.statusMsg = fmt.Sprintf("Error: Alias '%s' is already used by another script.", alias)
-					m.statusMsgTime = time.Now()
-					return
-				}
-			}
-		}
-		updatedConfig := ScriptConfig{
-			NameAlias:        alias,
-			Description:      desc,
-			Command:          cmdStr,
-			OutputFolderPath: outputPath,
-			Cron:             cronStr,
-			Host:             hostStr,
-		}
-		for ci, sc := range m.config.Scripts {
-			if sc.NameAlias == m.editingAlias {
-				updatedConfig.Input = sc.Input
-				m.config.Scripts[ci] = updatedConfig
-				break
-			}
-		}
-		err := SaveConfig(m.config)
-		if err != nil {
-			m.statusMsg = fmt.Sprintf("Error saving config: %v", err)
-			m.statusMsgTime = time.Now()
-			return
-		}
-		for si := range m.scripts {
-			if m.scripts[si].Config.NameAlias == m.editingAlias {
-				m.scripts[si].Config = updatedConfig
-				break
-			}
-		}
-		m.statusMsg = fmt.Sprintf("Script '%s' updated successfully.", alias)
-		m.statusMsgTime = time.Now()
-		m.editingAlias = ""
-		m.activeView = "main"
-		return
-	}
-
-	for _, s := range m.scripts {
-		if s.Config.NameAlias == alias {
-			m.statusMsg = fmt.Sprintf("Error: Script alias '%s' already exists.", alias)
-			m.statusMsgTime = time.Now()
-			return
-		}
-	}
-
-	newConfig := ScriptConfig{
+	config := ScriptConfig{
 		NameAlias:        alias,
 		Description:      desc,
 		Command:          cmdStr,
@@ -699,26 +704,105 @@ func (m *model) submitForm() {
 		Cron:             cronStr,
 		Host:             hostStr,
 	}
-
-	m.config.Scripts = append(m.config.Scripts, newConfig)
-	err := SaveConfig(m.config)
-	if err != nil {
-		m.config.Scripts = m.config.Scripts[:len(m.config.Scripts)-1]
-		m.statusMsg = fmt.Sprintf("Error saving config: %v", err)
+	if m.editingAlias != "" {
+		if !m.saveScriptConfigByAlias(m.editingAlias, config) {
+			return
+		}
+		m.statusMsg = fmt.Sprintf("Script '%s' updated successfully.", alias)
 		m.statusMsgTime = time.Now()
+		m.editingAlias = ""
+		m.activeView = "main"
+		return
+	}
+	if !m.createScriptConfig(config) {
 		return
 	}
 	m.statusMsg = fmt.Sprintf("Successfully added script '%s'.", alias)
 	m.statusMsgTime = time.Now()
-
-	m.scripts = append(m.scripts, ScriptState{
-		Config:   newConfig,
-		State:    "Idle",
-		Progress: 0,
-		Logs:     "",
-		Checked:  false,
-	})
 	m.activeView = "main"
+}
+
+func (m *model) createScriptConfig(cfg ScriptConfig) bool {
+	cfg.NameAlias = strings.TrimSpace(cfg.NameAlias)
+	cfg.Description = strings.TrimSpace(cfg.Description)
+	cfg.Command = strings.TrimSpace(cfg.Command)
+	cfg.OutputFolderPath = strings.TrimSpace(cfg.OutputFolderPath)
+	cfg.Cron = strings.TrimSpace(cfg.Cron)
+	cfg.Host = strings.TrimSpace(cfg.Host)
+	if cfg.NameAlias == "" || cfg.Command == "" || cfg.OutputFolderPath == "" {
+		m.statusMsg = "Error: Name, Command, and Output Path are required."
+		m.statusMsgTime = time.Now()
+		return false
+	}
+	if cfg.Cron != "" && !isValidCron(cfg.Cron) {
+		m.statusMsg = "Error: Invalid cron format. Expected 5 space-separated fields."
+		m.statusMsgTime = time.Now()
+		return false
+	}
+	for _, s := range m.scripts {
+		if s.Config.NameAlias == cfg.NameAlias {
+			m.statusMsg = fmt.Sprintf("Error: Script alias '%s' already exists.", cfg.NameAlias)
+			m.statusMsgTime = time.Now()
+			return false
+		}
+	}
+	m.config.Scripts = append(m.config.Scripts, cfg)
+	if err := SaveConfig(m.config); err != nil {
+		m.config.Scripts = m.config.Scripts[:len(m.config.Scripts)-1]
+		m.statusMsg = fmt.Sprintf("Error saving config: %v", err)
+		m.statusMsgTime = time.Now()
+		return false
+	}
+	m.scripts = append(m.scripts, ScriptState{Config: cfg, State: "Idle", Progress: 0, Logs: "", Checked: false})
+	return true
+}
+
+func (m *model) saveScriptConfigByAlias(alias string, cfg ScriptConfig) bool {
+	alias = strings.TrimSpace(alias)
+	cfg.NameAlias = strings.TrimSpace(cfg.NameAlias)
+	cfg.Description = strings.TrimSpace(cfg.Description)
+	cfg.Command = strings.TrimSpace(cfg.Command)
+	cfg.OutputFolderPath = strings.TrimSpace(cfg.OutputFolderPath)
+	cfg.Cron = strings.TrimSpace(cfg.Cron)
+	cfg.Host = strings.TrimSpace(cfg.Host)
+	if cfg.NameAlias == "" || cfg.Command == "" || cfg.OutputFolderPath == "" {
+		m.statusMsg = "Error: Name, Command, and Output Path are required."
+		m.statusMsgTime = time.Now()
+		return false
+	}
+	if cfg.Cron != "" && !isValidCron(cfg.Cron) {
+		m.statusMsg = "Error: Invalid cron format. Expected 5 space-separated fields."
+		m.statusMsgTime = time.Now()
+		return false
+	}
+	if cfg.NameAlias != alias {
+		for _, s := range m.scripts {
+			if s.Config.NameAlias == cfg.NameAlias {
+				m.statusMsg = fmt.Sprintf("Error: Alias '%s' is already used by another script.", cfg.NameAlias)
+				m.statusMsgTime = time.Now()
+				return false
+			}
+		}
+	}
+	for ci, sc := range m.config.Scripts {
+		if sc.NameAlias == alias {
+			cfg.Input = sc.Input
+			m.config.Scripts[ci] = cfg
+			break
+		}
+	}
+	if err := SaveConfig(m.config); err != nil {
+		m.statusMsg = fmt.Sprintf("Error saving config: %v", err)
+		m.statusMsgTime = time.Now()
+		return false
+	}
+	for si := range m.scripts {
+		if m.scripts[si].Config.NameAlias == alias {
+			m.scripts[si].Config = cfg
+			break
+		}
+	}
+	return true
 }
 
 func (m *model) updateEnvForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -847,62 +931,82 @@ func (m *model) initEnvForm() {
 
 func (m *model) submitEnvForm() {
 	focusedScript := &m.scripts[m.cursor]
-	cronVal := strings.TrimSpace(m.envInputs[0].Value())
-	focusedScript.Config.Cron = cronVal
-
-	if len(m.envInputs) > 11 {
-		notifyVal := strings.ToLower(strings.TrimSpace(m.envInputs[11].Value()))
-		focusedScript.Config.Notify = notifyVal == "y" || notifyVal == "yes"
-	}
-
-	existingKeys := make([]string, 0, len(focusedScript.Config.Input))
-	for k := range focusedScript.Config.Input {
-		existingKeys = append(existingKeys, k)
-	}
-	sort.Strings(existingKeys)
-	shownInForm := make(map[string]bool)
-	for i, k := range existingKeys {
-		if i >= 5 {
-			break
-		}
-		shownInForm[k] = true
-	}
-
-	inputsMap := make(map[string]interface{})
-	for k, v := range focusedScript.Config.Input {
-		if !shownInForm[k] {
-			inputsMap[k] = v
-		}
-	}
-	for i := 1; i < 11; i += 2 {
-		k := strings.TrimSpace(m.envInputs[i].Value())
-		v := strings.TrimSpace(m.envInputs[i+1].Value())
-		if k != "" {
-			inputsMap[k] = v
-		}
-	}
-	focusedScript.Config.Input = inputsMap
-
-	if cronVal != "" && !isValidCron(cronVal) {
-		m.statusMsg = "Error: Invalid cron format. Expected 5 space-separated fields."
-		m.statusMsgTime = time.Now()
-		return
-	}
-
-	for ci, sc := range m.config.Scripts {
-		if sc.NameAlias == focusedScript.Config.NameAlias {
-			m.config.Scripts[ci] = focusedScript.Config
-			break
-		}
-	}
-	err := SaveConfig(m.config)
-	if err != nil {
-		m.statusMsg = fmt.Sprintf("Error saving config: %v", err)
-	} else {
-		m.statusMsg = "Configuration updated successfully."
-	}
-	m.statusMsgTime = time.Now()
+	m.updateEnvConfigByAlias(focusedScript.Config.NameAlias, strings.TrimSpace(m.envInputs[0].Value()), len(m.envInputs) > 11 && (strings.ToLower(strings.TrimSpace(m.envInputs[11].Value())) == "y" || strings.ToLower(strings.TrimSpace(m.envInputs[11].Value())) == "yes"), nil)
 	m.activeView = "main"
+}
+
+func (m *model) updateEnvConfigByAlias(alias string, cron string, notify bool, input map[string]interface{}) bool {
+	if alias == "" {
+		return false
+	}
+	for i := range m.scripts {
+		if m.scripts[i].Config.NameAlias == alias {
+			focusedScript := &m.scripts[i]
+			if input != nil {
+				focusedScript.Config.Input = map[string]interface{}{}
+				for k, v := range input {
+					focusedScript.Config.Input[k] = v
+				}
+			} else {
+				cronVal := strings.TrimSpace(cron)
+				focusedScript.Config.Cron = cronVal
+				if len(m.envInputs) > 11 {
+					notifyVal := strings.ToLower(strings.TrimSpace(m.envInputs[11].Value()))
+					focusedScript.Config.Notify = notifyVal == "y" || notifyVal == "yes"
+				} else {
+					focusedScript.Config.Notify = notify
+				}
+
+				existingKeys := make([]string, 0, len(focusedScript.Config.Input))
+				for k := range focusedScript.Config.Input {
+					existingKeys = append(existingKeys, k)
+				}
+				sort.Strings(existingKeys)
+				shownInForm := make(map[string]bool)
+				for i, k := range existingKeys {
+					if i >= 5 {
+						break
+					}
+					shownInForm[k] = true
+				}
+
+				inputsMap := make(map[string]interface{})
+				for k, v := range focusedScript.Config.Input {
+					if !shownInForm[k] {
+						inputsMap[k] = v
+					}
+				}
+				for i := 1; i < 11; i += 2 {
+					k := strings.TrimSpace(m.envInputs[i].Value())
+					v := strings.TrimSpace(m.envInputs[i+1].Value())
+					if k != "" {
+						inputsMap[k] = v
+					}
+				}
+				focusedScript.Config.Input = inputsMap
+			}
+			if cron != "" && !isValidCron(cron) {
+				m.statusMsg = "Error: Invalid cron format. Expected 5 space-separated fields."
+				m.statusMsgTime = time.Now()
+				return false
+			}
+			for ci, sc := range m.config.Scripts {
+				if sc.NameAlias == focusedScript.Config.NameAlias {
+					m.config.Scripts[ci] = focusedScript.Config
+					break
+				}
+			}
+			if err := SaveConfig(m.config); err != nil {
+				m.statusMsg = fmt.Sprintf("Error saving config: %v", err)
+				m.statusMsgTime = time.Now()
+				return false
+			}
+			m.statusMsg = "Configuration updated successfully."
+			m.statusMsgTime = time.Now()
+			return true
+		}
+	}
+	return false
 }
 
 func (m *model) deleteSelectedScript() {
@@ -910,17 +1014,29 @@ func (m *model) deleteSelectedScript() {
 		m.activeView = "main"
 		return
 	}
-	idx := m.cursor
-	script := m.scripts[idx]
+	m.deleteScriptByAlias(m.scripts[m.cursor].Config.NameAlias)
+}
 
-	if script.Cmd != nil {
-		_ = StopTask(script.Cmd)
+func (m *model) deleteScriptByAlias(alias string) bool {
+	if alias == "" {
+		return false
 	}
-
-	aliasToDelete := script.Config.NameAlias
+	idx := -1
+	for i, script := range m.scripts {
+		if script.Config.NameAlias == alias {
+			idx = i
+			if script.Cmd != nil {
+				_ = StopTask(script.Cmd)
+			}
+			break
+		}
+	}
+	if idx == -1 {
+		return false
+	}
 	configIdx := -1
 	for ci, sc := range m.config.Scripts {
-		if sc.NameAlias == aliasToDelete {
+		if sc.NameAlias == alias {
 			configIdx = ci
 			break
 		}
@@ -929,20 +1045,18 @@ func (m *model) deleteSelectedScript() {
 		m.config.Scripts = append(m.config.Scripts[:configIdx], m.config.Scripts[configIdx+1:]...)
 	}
 	_ = SaveConfig(m.config)
-
 	m.scripts = append(m.scripts[:idx], m.scripts[idx+1:]...)
-
 	if m.cursor >= len(m.scripts) {
 		m.cursor = len(m.scripts) - 1
 	}
 	if m.cursor < 0 {
 		m.cursor = 0
 	}
-
 	m.activeView = "main"
-	m.statusMsg = fmt.Sprintf("Successfully deleted script '%s'.", script.Config.NameAlias)
+	m.statusMsg = fmt.Sprintf("Successfully deleted script '%s'.", alias)
 	m.statusMsgTime = time.Now()
 	m.updateViewport()
+	return true
 }
 
 func InterpretCarriageReturns(s string) string {
@@ -1078,6 +1192,52 @@ func (m *model) runSelected() tea.Cmd {
 		}
 	}
 	return nil
+}
+
+func (m *model) findScriptIndexByAlias(alias string) int {
+	for i, s := range m.scripts {
+		if s.Config.NameAlias == alias {
+			return i
+		}
+	}
+	return -1
+}
+
+func (m *model) setTheme(theme ThemeConfig) {
+	m.config.Theme = normalizeTheme(theme)
+	m.theme = m.config.Theme
+	m.applyTheme()
+	_ = SaveConfig(m.config)
+	m.statusMsg = fmt.Sprintf("Theme switched to %s.", strings.Title(m.config.Theme.Name)) //nolint:staticcheck
+	m.statusMsgTime = time.Now()
+}
+
+func (m *model) buildDashboardSnapshot() DashboardSnapshot {
+	scripts := make([]DashboardScriptView, 0, len(m.scripts))
+	for _, s := range m.scripts {
+		scripts = append(scripts, DashboardScriptView{
+			Alias:            s.Config.NameAlias,
+			Description:      s.Config.Description,
+			Command:          s.Config.Command,
+			OutputFolderPath: s.Config.OutputFolderPath,
+			Cron:             s.Config.Cron,
+			Host:             s.Config.Host,
+			State:            s.State,
+			Progress:         s.Progress,
+			Logs:             s.Logs,
+			TaskID:           s.TaskID,
+			StartedAt:        s.StartedAt,
+			FinishedAt:       s.FinishedAt,
+		})
+	}
+	return DashboardSnapshot{Scripts: scripts, Theme: normalizeTheme(m.config.Theme)}
+}
+
+func dashboardBroadcast() {
+	select {
+	case dashboardUpdateSignal <- struct{}{}:
+	default:
+	}
 }
 
 func (m *model) runNextSequentialCmd() tea.Cmd {

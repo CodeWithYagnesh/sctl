@@ -146,31 +146,42 @@ func printHelp() {
 }
 
 func main() {
-	if len(os.Args) != 1 {
-		if len(os.Args) >= 3 && (os.Args[1] == "--run" || os.Args[1] == "-run") {
-			alias := os.Args[2]
-			if err := runHeadless(alias); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
+	noDashboard := false
+	if len(os.Args) > 1 {
+		for i := 1; i < len(os.Args); i++ {
+			switch os.Args[i] {
+			case "--run", "-run":
+				if i+1 >= len(os.Args) {
+					printHelp()
+					os.Exit(1)
+				}
+				if err := runHeadless(os.Args[i+1]); err != nil {
+					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+					os.Exit(1)
+				}
+				os.Exit(0)
+			case "--version", "-v":
+				fmt.Printf("sctl version: %s\n", Version)
+				fmt.Printf("GitHub: github/codewithyagnesh\n")
+				os.Exit(0)
+			case "--help", "-h":
+				printHelp()
+				os.Exit(0)
+			case "--no-dashboard":
+				noDashboard = true
+			default:
+				printHelp()
+				os.Exit(0)
 			}
-			os.Exit(0)
 		}
-		if len(os.Args) >= 2 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
-			fmt.Printf("sctl version: %s\n", Version)
-			fmt.Printf("GitHub: github/codewithyagnesh\n")
-			os.Exit(0)
-		}
-		if len(os.Args) >= 2 && (os.Args[1] == "--help" || os.Args[1] == "-h") {
-			printHelp()
-			os.Exit(0)
-		}
-		printHelp()
-		os.Exit(0)
-	} else {
-		p := tea.NewProgram(initialModel(), tea.WithAltScreen())
-		program = p
-		if _, err := p.Run(); err != nil {
-			log.Fatalf("Error running program: %v", err)
-		}
+	}
+
+	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
+	program = p
+	if !noDashboard {
+		go startDashboard(p)
+	}
+	if _, err := p.Run(); err != nil {
+		log.Fatalf("Error running program: %v", err)
 	}
 }

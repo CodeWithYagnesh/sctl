@@ -15,6 +15,10 @@ import (
 var program *tea.Program
 var stoppedPIDs sync.Map
 
+var dashboardUpdateSignal = make(chan struct{}, 1)
+var dashboardSubscribers = make(map[chan struct{}]struct{})
+var dashboardSubscriberMu sync.Mutex
+
 var Version = "dev"
 
 type activePanel int
@@ -25,16 +29,16 @@ const (
 )
 
 type ScriptConfig struct {
-	NameAlias        string                 `yaml:"name_alias"`
-	Description      string                 `yaml:"description"`
-	Command          string                 `yaml:"command"`
-	OutputFolderPath string                 `yaml:"output_folder_path"`
-	Input            map[string]interface{} `yaml:"input,omitempty"`
-	Cron             string                 `yaml:"cron,omitempty"`
-	Notify           bool                   `yaml:"notify,omitempty"`
+	NameAlias        string                 `yaml:"name_alias" json:"name_alias"`
+	Description      string                 `yaml:"description" json:"description"`
+	Command          string                 `yaml:"command" json:"command"`
+	OutputFolderPath string                 `yaml:"output_folder_path" json:"output_folder_path"`
+	Input            map[string]interface{} `yaml:"input,omitempty" json:"input,omitempty"`
+	Cron             string                 `yaml:"cron,omitempty" json:"cron,omitempty"`
+	Notify           bool                   `yaml:"notify,omitempty" json:"notify,omitempty"`
 	// Host, if non-empty, causes the command to run remotely via SSH.
 	// Format: user@hostname or hostname (uses your default SSH key/config).
-	Host string `yaml:"host,omitempty"`
+	Host string `yaml:"host,omitempty" json:"host,omitempty"`
 }
 
 type ThemeConfig struct {

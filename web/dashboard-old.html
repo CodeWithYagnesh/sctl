@@ -1,0 +1,1163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sctl Dashboard</title>
+    <style>
+      :root {
+        --bg: #0f1419;
+        --panel: #1a1f29;
+        --panel-2: #242d3d;
+        --border: #3a4556;
+        --text: #e8ecf1;
+        --muted: #a8b0bc;
+        --accent: #5b7cfa;
+        --accent-hover: #7a92ff;
+        --success: #12b886;
+        --fail: #fa5252;
+        --stopped: #fcc419;
+        --idle: #495057;
+        --shadow: 0 4px 20px rgba(0,0,0,0.3);
+        --shadow-sm: 0 2px 8px rgba(0,0,0,0.2);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 24px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(135deg, rgba(26, 31, 41, 0.95) 0%, rgba(18, 23, 32, 0.8) 100%);
+        box-shadow: var(--shadow-sm);
+      }
+      .top-left { display: flex; align-items: center; gap: 12px; }
+      h1 { 
+        margin: 0; 
+        font-size: 1.6rem; 
+        font-weight: 700;
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      .logo { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: var(--accent); border-radius: 8px; color: white; font-weight: bold; font-size: 1.2rem; }
+      .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+      button {
+        background: var(--accent);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 14px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 0.9rem;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      button:hover {
+        background: var(--accent-hover);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(91, 124, 250, 0.3);
+      }
+      button:active { transform: translateY(0); }
+      .secondary { background: var(--panel-2); color: var(--text); }
+      .secondary:hover { background: var(--border); }
+      .danger { background: var(--fail); }
+      .danger:hover { background: #ff6b6b; }
+      .container {
+        display: grid;
+        grid-template-columns: 300px 1fr;
+        gap: 16px;
+        padding: 16px;
+        height: calc(100vh - 80px);
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        box-shadow: var(--shadow-sm);
+      }
+      .sidebar-header {
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--border);
+      }
+      .list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        flex: 1;
+        overflow-y: auto;
+        padding-right: 4px;
+      }
+      .list::-webkit-scrollbar {
+        width: 8px;
+      }
+      .list::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .list::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 4px;
+      }
+      .list::-webkit-scrollbar-thumb:hover {
+        background: var(--muted);
+      }
+      .search-box {
+        width: 100%;
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        padding: 8px 12px;
+        font-family: inherit;
+        margin-bottom: 12px;
+        font-size: 0.9rem;
+      }
+      .search-box::placeholder { color: var(--muted); }
+      .script-card {
+        background: var(--panel-2);
+        border: 2px solid transparent;
+        border-radius: 10px;
+        padding: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .script-card:hover {
+        border-color: var(--accent);
+        background: linear-gradient(135deg, rgba(91, 124, 250, 0.05) 0%, rgba(91, 124, 250, 0.02) 100%);
+      }
+      .script-card.selected {
+        border-color: var(--accent);
+        background: linear-gradient(135deg, rgba(91, 124, 250, 0.15) 0%, rgba(91, 124, 250, 0.05) 100%);
+        box-shadow: 0 0 12px rgba(91, 124, 250, 0.2);
+      }
+      .script-card header {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 6px;
+        align-items: center;
+      }
+      .script-name {
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .state-running { background: var(--success); color: white; }
+      .state-success { background: var(--success); color: white; }
+      .state-failed { background: var(--fail); color: white; }
+      .state-stopped { background: var(--stopped); color: #000; }
+      .state-idle { background: var(--idle); color: #e8ecf1; }
+      .script-desc {
+        font-size: 0.8rem;
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .progress-bar {
+        height: 6px;
+        background: rgba(0,0,0,0.3);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        overflow: hidden;
+        margin-top: 8px;
+      }
+      .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--accent) 0%, var(--accent-hover) 100%);
+        transition: width 0.3s ease;
+      }
+      .main-panel {
+        display: flex;
+        flex-direction: column;
+      }
+      .details-header {
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      .details-title {
+        font-size: 1.3rem;
+        font-weight: 700;
+        margin: 0 0 6px 0;
+      }
+      .details-meta {
+        font-size: 0.85rem;
+        color: var(--muted);
+        display: flex;
+        gap: 16px;
+      }
+      .meta-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .meta-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--muted);
+      }
+      .action-bar {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+      .action-bar-group {
+        display: flex;
+        gap: 8px;
+        padding-right: 8px;
+        border-right: 1px solid var(--border);
+      }
+      .action-bar-group:last-child { border-right: none; }
+      .logs {
+        background: rgba(0,0,0,0.3);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        white-space: pre-wrap;
+        flex: 1;
+        overflow: auto;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 0.8rem;
+        color: #b0b8c4;
+        line-height: 1.5;
+      }
+      .logs::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      .logs::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .logs::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 4px;
+      }
+      .logs::-webkit-scrollbar-thumb:hover {
+        background: var(--muted);
+      }
+      .muted { color: var(--muted); }
+      form { display: grid; gap: 12px; }
+      input, textarea, select {
+        width: 100%;
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        padding: 10px 12px;
+        font-family: inherit;
+        font-size: 0.9rem;
+        transition: all 0.2s;
+      }
+      input:focus, textarea:focus, select:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 8px rgba(91, 124, 250, 0.2);
+      }
+      textarea { resize: vertical; min-height: 80px; }
+      .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.8);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+        animation: fadeIn 0.2s;
+      }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      .modal.open { display: flex; }
+      .modal-content {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 28px;
+        max-width: 550px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: var(--shadow);
+        animation: slideUp 0.3s;
+      }
+      @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+      .modal-content h2 { margin-top: 0; margin-bottom: 16px; font-size: 1.3rem; }
+      .modal-content h3 { margin-top: 16px; margin-bottom: 12px; font-size: 1rem; }
+      .settings-group {
+        margin-bottom: 16px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      .settings-group:last-child { border-bottom: none; }
+      .setting-label {
+        font-weight: 600;
+        font-size: 0.9rem;
+        margin-bottom: 8px;
+        display: block;
+      }
+      .theme-options {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        gap: 8px;
+      }
+      .theme-btn {
+        padding: 8px;
+        border: 2px solid var(--border);
+        border-radius: 8px;
+        background: var(--panel-2);
+        cursor: pointer;
+        text-align: center;
+        font-size: 0.85rem;
+        transition: all 0.2s;
+      }
+      .theme-btn:hover { border-color: var(--accent); }
+      .theme-btn.active { border-color: var(--accent); background: rgba(91, 124, 250, 0.15); }
+      .theme-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        margin: 0 auto 6px;
+      }
+      .keyboard-hints { font-size: 0.8rem; color: var(--muted); margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+      .hint-item { margin: 6px 0; }
+      .hint-key { background: var(--panel-2); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: 600; }
+      .modal-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 24px;
+      }
+      .modal-actions button { flex: 1; }
+      .no-scripts {
+        padding: 32px;
+        text-align: center;
+        color: var(--muted);
+      }
+      @media (max-width: 900px) {
+        .container { grid-template-columns: 1fr; }
+        .action-bar-group { border-right: none; border-bottom: 1px solid var(--border); padding-right: 0; padding-bottom: 8px; }
+      }
+      @media (max-width: 600px) {
+        .topbar { padding: 12px 16px; }
+        h1 { font-size: 1.2rem; }
+        .toolbar { gap: 4px; }
+        button { padding: 8px 10px; font-size: 0.8rem; }
+        .grid2 { grid-template-columns: 1fr; }
+        .theme-options { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="top-left">
+        <div class="logo">⚙</div>
+        <h1>sctl Dashboard</h1>
+      </div>
+      <div class="toolbar">
+        <button id="refreshBtn" title="Refresh (F5)">🔄 Refresh</button>
+        <button id="newScriptBtn" class="secondary" title="New script (Ctrl+N)">➕ New</button>
+        <button id="settingsBtn" class="secondary" title="Settings (S)">⚙ Settings</button>
+        <button id="helpBtn" class="secondary" title="Help (?)">❓ Help</button>
+      </div>
+    </div>
+    <div class="container">
+      <aside class="panel">
+        <div class="sidebar-header">📋 Scripts</div>
+        <input id="searchBox" type="text" class="search-box" placeholder="Search scripts...">
+        <div id="scriptsList" class="list"></div>
+      </aside>
+      <main class="panel main-panel">
+        <div id="selectedScriptInfo" class="no-scripts">Select a script to get started</div>
+        <div id="scriptDetails" style="display: none; flex: 1; display: flex; flex-direction: column;">
+          <div class="details-header">
+            <h2 id="detailsTitle" class="details-title"></h2>
+            <div class="details-meta">
+              <div class="meta-item"><span id="stateLabel" class="badge"></span></div>
+              <div class="meta-item"><span class="meta-dot"></span><span id="taskLabel"></span></div>
+              <div class="meta-item"><span class="meta-dot"></span><span id="commandLabel" class="muted"></span></div>
+            </div>
+          </div>
+          <div class="action-bar">
+            <div class="action-bar-group">
+              <button id="runBtn" title="Run (Enter)">▶ Run</button>
+              <button id="stopBtn" class="secondary" title="Stop (Esc)">⏹ Stop</button>
+              <button id="editBtn" class="secondary" title="Edit (E)">✏ Edit</button>
+            </div>
+            <div class="action-bar-group">
+              <button id="moveUpBtn" class="secondary" title="Move up (Shift+↑)">⬆ Up</button>
+              <button id="moveDownBtn" class="secondary" title="Move down (Shift+↓)">⬇ Down</button>
+            </div>
+            <div class="action-bar-group">
+              <button id="historyBtn" class="secondary" title="History (H)">📊 History</button>
+              <button id="reportBtn" class="secondary" title="Report (R)">📄 Report</button>
+              <button id="deleteBtn" class="secondary danger" title="Delete (Del)">🗑 Delete</button>
+            </div>
+          </div>
+          <div class="progress-bar"><div id="progressFill" class="progress-fill" style="width: 0%"></div></div>
+          <pre id="logsView" class="logs">No logs</pre>
+        </div>
+      </main>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal">
+      <div class="modal-content">
+        <h2>Edit Script</h2>
+        <form id="editForm">
+          <div><input id="editAlias" name="name_alias" placeholder="Script name" required /></div>
+          <div><textarea id="editDescription" name="description" placeholder="Description (optional)"></textarea></div>
+          <div><input id="editCommand" name="command" placeholder="Command" required /></div>
+          <div><input id="editOutputFolder" name="output_folder_path" placeholder="Output folder path" required /></div>
+          <div class="grid2">
+            <input id="editCron" name="cron" placeholder="Cron schedule (optional)" />
+            <input id="editHost" name="host" placeholder="Host (optional)" />
+          </div>
+          <div id="envInputsContainer"></div>
+          <div class="modal-actions">
+            <button type="submit">💾 Save</button>
+            <button type="button" class="secondary" id="cancelEdit">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Create Modal -->
+    <div id="createModal" class="modal">
+      <div class="modal-content">
+        <h2>Create New Script</h2>
+        <form id="createForm">
+          <div><input id="createAlias" name="name_alias" placeholder="Script name" required /></div>
+          <div><textarea id="createDescription" name="description" placeholder="Description (optional)"></textarea></div>
+          <div><input id="createCommand" name="command" placeholder="Command" required /></div>
+          <div><input id="createOutputFolder" name="output_folder_path" placeholder="Output folder path" required /></div>
+          <div class="grid2">
+            <input id="createCron" name="cron" placeholder="Cron schedule (optional)" />
+            <input id="createHost" name="host" placeholder="Host (optional)" />
+          </div>
+          <div id="createEnvInputsContainer"></div>
+          <div class="modal-actions">
+            <button type="submit">✅ Create</button>
+            <button type="button" class="secondary" id="cancelCreate">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+      <div class="modal-content">
+        <h2>⚙ Settings</h2>
+        
+        <div class="settings-group">
+          <label class="setting-label">🎨 Theme</label>
+          <div class="theme-options">
+            <button type="button" class="theme-btn active" data-theme="dark">
+              <div class="theme-color" style="background: #1a1f29;"></div>
+              Dark
+            </button>
+            <button type="button" class="theme-btn" data-theme="light">
+              <div class="theme-color" style="background: #f5f7fa;"></div>
+              Light
+            </button>
+            <button type="button" class="theme-btn" data-theme="navy">
+              <div class="theme-color" style="background: #0a1428;"></div>
+              Navy
+            </button>
+            <button type="button" class="theme-btn" data-theme="purple">
+              <div class="theme-color" style="background: #2d1b4e;"></div>
+              Purple
+            </button>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <label class="setting-label">⚡ Accent Color</label>
+          <div class="theme-options">
+            <button type="button" class="theme-btn active" data-accent="blue" title="Blue">
+              <div class="theme-color" style="background: #5b7cfa;"></div>
+              Blue
+            </button>
+            <button type="button" class="theme-btn" data-accent="purple" title="Purple">
+              <div class="theme-color" style="background: #ae5ff8;"></div>
+              Purple
+            </button>
+            <button type="button" class="theme-btn" data-accent="pink" title="Pink">
+              <div class="theme-color" style="background: #ff6b9d;"></div>
+              Pink
+            </button>
+            <button type="button" class="theme-btn" data-accent="green" title="Green">
+              <div class="theme-color" style="background: #12b886;"></div>
+              Green
+            </button>
+            <button type="button" class="theme-btn" data-accent="orange" title="Orange">
+              <div class="theme-color" style="background: #ff922b;"></div>
+              Orange
+            </button>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <label class="setting-label">⏱ Auto-refresh</label>
+          <select id="autoRefreshSelect">
+            <option value="0">Disabled</option>
+            <option value="5">5 seconds</option>
+            <option value="10" selected>10 seconds</option>
+            <option value="30">30 seconds</option>
+            <option value="60">1 minute</option>
+          </select>
+        </div>
+
+        <div class="settings-group">
+          <label class="setting-label">📊 Max log lines</label>
+          <input type="number" id="maxLogsInput" min="100" max="10000" value="1000" />
+        </div>
+
+        <div class="settings-group">
+          <label class="setting-label">
+            <input type="checkbox" id="compactModeCheckbox" /> Compact script cards
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="secondary" id="resetSettings">↺ Reset</button>
+          <button type="button" id="closeSettings">✓ Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="helpModal" class="modal">
+      <div class="modal-content">
+        <h2>❓ Keyboard Shortcuts & Help</h2>
+        
+        <h3>Navigation</h3>
+        <div class="keyboard-hints">
+          <div class="hint-item"><span class="hint-key">↑↓</span> Navigate scripts</div>
+          <div class="hint-item"><span class="hint-key">/</span> Search scripts</div>
+        </div>
+
+        <h3>Script Control</h3>
+        <div class="keyboard-hints">
+          <div class="hint-item"><span class="hint-key">Enter</span> Run selected script</div>
+          <div class="hint-item"><span class="hint-key">Esc</span> Stop script</div>
+          <div class="hint-item"><span class="hint-key">E</span> Edit script</div>
+          <div class="hint-item"><span class="hint-key">Del</span> Delete script</div>
+        </div>
+
+        <h3>Script Management</h3>
+        <div class="keyboard-hints">
+          <div class="hint-item"><span class="hint-key">Shift+↑</span> Move script up</div>
+          <div class="hint-item"><span class="hint-key">Shift+↓</span> Move script down</div>
+          <div class="hint-item"><span class="hint-key">H</span> View history</div>
+          <div class="hint-item"><span class="hint-key">R</span> Generate report</div>
+        </div>
+
+        <h3>Application</h3>
+        <div class="keyboard-hints">
+          <div class="hint-item"><span class="hint-key">Ctrl+N</span> Create new script</div>
+          <div class="hint-item"><span class="hint-key">S</span> Open settings</div>
+          <div class="hint-item"><span class="hint-key">?</span> Show this help</div>
+          <div class="hint-item"><span class="hint-key">F5</span> Refresh data</div>
+        </div>
+
+        <div class="modal-actions" style="margin-top: 24px;">
+          <button type="button" class="secondary" id="closeHelp">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Theme configurations
+      const themes = {
+        dark: {
+          '--bg': '#0f1419',
+          '--panel': '#1a1f29',
+          '--panel-2': '#242d3d',
+          '--border': '#3a4556',
+          '--text': '#e8ecf1',
+          '--muted': '#a8b0bc',
+        },
+        light: {
+          '--bg': '#f5f7fa',
+          '--panel': '#ffffff',
+          '--panel-2': '#f0f2f5',
+          '--border': '#e0e4e8',
+          '--text': '#1a1d23',
+          '--muted': '#5a6470',
+        },
+        navy: {
+          '--bg': '#0a1428',
+          '--panel': '#0f1729',
+          '--panel-2': '#141d2e',
+          '--border': '#2a3549',
+          '--text': '#e0e8f0',
+          '--muted': '#8a9aac',
+        },
+        purple: {
+          '--bg': '#1a1329',
+          '--panel': '#2d1b4e',
+          '--panel-2': '#3d2663',
+          '--border': '#4d3878',
+          '--text': '#e8e0f0',
+          '--muted': '#a8a0b8',
+        }
+      };
+
+      const accentColors = {
+        blue: { '--accent': '#5b7cfa', '--accent-hover': '#7a92ff' },
+        purple: { '--accent': '#ae5ff8', '--accent-hover': '#cc7eff' },
+        pink: { '--accent': '#ff6b9d', '--accent-hover': '#ff8ab5' },
+        green: { '--accent': '#12b886', '--accent-hover': '#40c499' },
+        orange: { '--accent': '#ff922b', '--accent-hover': '#ffb347' }
+      };
+
+      const state = {
+        scripts: [],
+        selectedIdx: 0,
+        eventSource: null,
+        filteredScripts: [],
+        searchTerm: '',
+        settings: {
+          theme: 'dark',
+          accent: 'blue',
+          autoRefresh: 10,
+          maxLogs: 1000,
+          compactMode: false
+        }
+      };
+
+      const scriptList = document.getElementById('scriptsList');
+      const selectedInfo = document.getElementById('selectedScriptInfo');
+      const scriptDetails = document.getElementById('scriptDetails');
+      const logsView = document.getElementById('logsView');
+      const progressFill = document.getElementById('progressFill');
+      const searchBox = document.getElementById('searchBox');
+
+      // Load settings from localStorage
+      function loadSettings() {
+        const saved = localStorage.getItem('sctlSettings');
+        if (saved) {
+          state.settings = { ...state.settings, ...JSON.parse(saved) };
+        }
+      }
+
+      // Save settings to localStorage
+      function saveSettings() {
+        localStorage.setItem('sctlSettings', JSON.stringify(state.settings));
+      }
+
+      // Apply theme
+      function applyTheme(themeName, accentName) {
+        const root = document.documentElement;
+        const theme = themes[themeName] || themes.dark;
+        const accent = accentColors[accentName] || accentColors.blue;
+        
+        Object.assign(theme, accent);
+        Object.entries(theme).forEach(([key, value]) => {
+          root.style.setProperty(key, value);
+        });
+      }
+
+      function setTheme(theme) {
+        if (!theme) return;
+        const root = document.documentElement;
+        if (theme.accent) root.style.setProperty('--accent', theme.accent);
+        if (theme.success) root.style.setProperty('--success', theme.success);
+        if (theme.fail) root.style.setProperty('--fail', theme.fail);
+        if (theme.stopped) root.style.setProperty('--stopped', theme.stopped);
+        if (theme.idle) root.style.setProperty('--idle', theme.idle);
+      }
+
+      function getSelectedScript() {
+        const filtered = state.searchTerm ? state.filteredScripts : state.scripts;
+        return filtered[state.selectedIdx] || null;
+      }
+
+      function filterScripts(term) {
+        state.searchTerm = term.toLowerCase();
+        if (!term) {
+          state.filteredScripts = [...state.scripts];
+          state.selectedIdx = 0;
+        } else {
+          state.filteredScripts = state.scripts.filter(s => 
+            s.alias.toLowerCase().includes(term) || 
+            (s.description && s.description.toLowerCase().includes(term))
+          );
+          state.selectedIdx = 0;
+        }
+        renderList();
+      }
+
+      function renderList() {
+        const scripts = state.searchTerm ? state.filteredScripts : state.scripts;
+        
+        if (!scripts.length) {
+          scriptList.innerHTML = '<div class="no-scripts">No scripts found</div>';
+          selectedInfo.style.display = 'block';
+          scriptDetails.style.display = 'none';
+          return;
+        }
+
+        scriptList.innerHTML = scripts.map((script, idx) => `
+          <div class="script-card ${idx === state.selectedIdx ? 'selected' : ''}" data-idx="${idx}">
+            <header>
+              <span class="script-name">${script.alias}</span>
+              <span class="badge state-${(script.state || 'idle').toLowerCase()}">${(script.state || 'Idle').toUpperCase()}</span>
+            </header>
+            ${script.description ? `<div class="script-desc">${script.description}</div>` : ''}
+            <div class="progress-bar"><div class="progress-fill" style="width: ${script.progress || 0}%"></div></div>
+          </div>
+        `).join('');
+
+        scriptList.querySelectorAll('.script-card').forEach((card, idx) => {
+          card.onclick = () => {
+            state.selectedIdx = idx;
+            renderList();
+            renderDetails();
+          };
+        });
+        
+        renderDetails();
+      }
+
+      function renderDetails() {
+        const scripts = state.searchTerm ? state.filteredScripts : state.scripts;
+        const script = scripts[state.selectedIdx] || null;
+        
+        if (!script) {
+          selectedInfo.style.display = 'block';
+          scriptDetails.style.display = 'none';
+          return;
+        }
+
+        selectedInfo.style.display = 'none';
+        scriptDetails.style.display = 'flex';
+        
+        document.getElementById('detailsTitle').textContent = script.alias;
+        document.getElementById('stateLabel').textContent = (script.state || 'Idle').toUpperCase();
+        document.getElementById('stateLabel').className = `badge state-${(script.state || 'idle').toLowerCase()}`;
+        document.getElementById('taskLabel').textContent = `Task #${script.taskId || 0}`;
+        document.getElementById('commandLabel').textContent = script.command || 'N/A';
+        
+        logsView.textContent = script.logs || 'No output yet.';
+        progressFill.style.width = `${script.progress || 0}%`;
+        
+        // Auto scroll logs to bottom
+        logsView.scrollTop = logsView.scrollHeight;
+      }
+
+      async function fetchScripts() {
+        try {
+          const response = await fetch('/api/scripts');
+          const data = await response.json();
+          state.scripts = data.scripts || [];
+          state.filteredScripts = [...state.scripts];
+          setTheme(data.theme || {});
+          renderList();
+        } catch (err) {
+          console.error('Fetch error:', err);
+        }
+      }
+
+      function connectSSE() {
+        if (state.eventSource) state.eventSource.close();
+        state.eventSource = new EventSource('/api/stream');
+        state.eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            state.scripts = data.scripts || [];
+            state.filteredScripts = state.searchTerm 
+              ? state.scripts.filter(s => s.alias.toLowerCase().includes(state.searchTerm))
+              : [...state.scripts];
+            setTheme(data.theme || {});
+            renderList();
+          } catch (err) {
+            console.error(err);
+          }
+        };
+      }
+
+      async function runScript(alias) {
+        await fetch(`/api/scripts/${encodeURIComponent(alias)}/run`, { method: 'POST' });
+        setTimeout(fetchScripts, 100);
+      }
+
+      async function stopScript(alias) {
+        await fetch(`/api/scripts/${encodeURIComponent(alias)}/stop`, { method: 'POST' });
+        setTimeout(fetchScripts, 100);
+      }
+
+      async function deleteScript(alias) {
+        if (!confirm(`Delete script "${alias}"?`)) return;
+        await fetch(`/api/scripts/${encodeURIComponent(alias)}`, { method: 'DELETE' });
+        state.selectedIdx = 0;
+        await fetchScripts();
+      }
+
+      async function moveScript(alias, direction) {
+        const scripts = state.searchTerm ? state.filteredScripts : state.scripts;
+        const idx = scripts.findIndex(s => s.alias === alias);
+        if (idx < 0) return;
+        const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+        if (newIdx < 0 || newIdx >= scripts.length) return;
+        [scripts[idx], scripts[newIdx]] = [scripts[newIdx], scripts[idx]];
+        state.selectedIdx = newIdx;
+        renderList();
+      }
+
+      function openEditModal() {
+        const script = getSelectedScript();
+        if (!script) return;
+        document.getElementById('editAlias').value = script.alias;
+        document.getElementById('editDescription').value = script.description || '';
+        document.getElementById('editCommand').value = script.command || '';
+        document.getElementById('editOutputFolder').value = script.outputFolder || '';
+        document.getElementById('editCron').value = script.cron || '';
+        document.getElementById('editHost').value = script.host || '';
+        document.getElementById('editModal').classList.add('open');
+      }
+
+      function closeEditModal() {
+        document.getElementById('editModal').classList.remove('open');
+      }
+
+      function openCreateModal() {
+        document.getElementById('createAlias').value = '';
+        document.getElementById('createDescription').value = '';
+        document.getElementById('createCommand').value = '';
+        document.getElementById('createOutputFolder').value = '';
+        document.getElementById('createCron').value = '';
+        document.getElementById('createHost').value = '';
+        document.getElementById('createModal').classList.add('open');
+      }
+
+      function closeCreateModal() {
+        document.getElementById('createModal').classList.remove('open');
+      }
+
+      function openSettingsModal() {
+        // Set current theme
+        document.querySelectorAll('[data-theme]').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.theme === state.settings.theme);
+        });
+        // Set current accent
+        document.querySelectorAll('[data-accent]').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.accent === state.settings.accent);
+        });
+        document.getElementById('autoRefreshSelect').value = state.settings.autoRefresh;
+        document.getElementById('maxLogsInput').value = state.settings.maxLogs;
+        document.getElementById('compactModeCheckbox').checked = state.settings.compactMode;
+        document.getElementById('settingsModal').classList.add('open');
+      }
+
+      function closeSettingsModal() {
+        document.getElementById('settingsModal').classList.remove('open');
+      }
+
+      function openHelpModal() {
+        document.getElementById('helpModal').classList.add('open');
+      }
+
+      function closeHelpModal() {
+        document.getElementById('helpModal').classList.remove('open');
+      }
+
+      // Button event listeners
+      document.getElementById('refreshBtn').onclick = fetchScripts;
+      document.getElementById('newScriptBtn').onclick = openCreateModal;
+      document.getElementById('settingsBtn').onclick = openSettingsModal;
+      document.getElementById('helpBtn').onclick = openHelpModal;
+      document.getElementById('closeHelp').onclick = closeHelpModal;
+      document.getElementById('cancelEdit').onclick = closeEditModal;
+      document.getElementById('cancelCreate').onclick = closeCreateModal;
+      document.getElementById('closeSettings').onclick = closeSettingsModal;
+
+      // Settings buttons
+      document.querySelectorAll('[data-theme]').forEach(btn => {
+        btn.onclick = (e) => {
+          e.preventDefault();
+          state.settings.theme = btn.dataset.theme;
+          applyTheme(state.settings.theme, state.settings.accent);
+          saveSettings();
+          document.querySelectorAll('[data-theme]').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+        };
+      });
+
+      document.querySelectorAll('[data-accent]').forEach(btn => {
+        btn.onclick = (e) => {
+          e.preventDefault();
+          state.settings.accent = btn.dataset.accent;
+          applyTheme(state.settings.theme, state.settings.accent);
+          saveSettings();
+          document.querySelectorAll('[data-accent]').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+        };
+      });
+
+      document.getElementById('autoRefreshSelect').onchange = (e) => {
+        state.settings.autoRefresh = parseInt(e.target.value);
+        saveSettings();
+      };
+
+      document.getElementById('maxLogsInput').onchange = (e) => {
+        state.settings.maxLogs = parseInt(e.target.value);
+        saveSettings();
+      };
+
+      document.getElementById('compactModeCheckbox').onchange = (e) => {
+        state.settings.compactMode = e.target.checked;
+        saveSettings();
+      };
+
+      document.getElementById('resetSettings').onclick = () => {
+        if (confirm('Reset all settings to defaults?')) {
+          state.settings = {
+            theme: 'dark',
+            accent: 'blue',
+            autoRefresh: 10,
+            maxLogs: 1000,
+            compactMode: false
+          };
+          saveSettings();
+          applyTheme(state.settings.theme, state.settings.accent);
+          openSettingsModal();
+        }
+      };
+
+      document.getElementById('runBtn').onclick = () => {
+        const script = getSelectedScript();
+        if (script) runScript(script.alias);
+      };
+
+      document.getElementById('stopBtn').onclick = () => {
+        const script = getSelectedScript();
+        if (script) stopScript(script.alias);
+      };
+
+      document.getElementById('editBtn').onclick = openEditModal;
+
+      document.getElementById('moveUpBtn').onclick = () => {
+        const script = getSelectedScript();
+        if (script) moveScript(script.alias, 'up');
+      };
+
+      document.getElementById('moveDownBtn').onclick = () => {
+        const script = getSelectedScript();
+        if (script) moveScript(script.alias, 'down');
+      };
+
+      document.getElementById('deleteBtn').onclick = () => {
+        const script = getSelectedScript();
+        if (script) deleteScript(script.alias);
+      };
+
+      document.getElementById('historyBtn').onclick = async () => {
+        const script = getSelectedScript();
+        if (!script) return;
+        const resp = await fetch(`/api/scripts/${encodeURIComponent(script.alias)}/history`);
+        const history = await resp.json();
+        alert(JSON.stringify(history, null, 2));
+      };
+
+      document.getElementById('reportBtn').onclick = async () => {
+        const script = getSelectedScript();
+        if (!script) return;
+        window.open(`/api/scripts/${encodeURIComponent(script.alias)}/report`, '_blank');
+      };
+
+      // Edit form submission
+      document.getElementById('editForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const script = getSelectedScript();
+        if (!script) return;
+        const payload = {
+          name_alias: document.getElementById('editAlias').value,
+          description: document.getElementById('editDescription').value,
+          command: document.getElementById('editCommand').value,
+          output_folder_path: document.getElementById('editOutputFolder').value,
+          cron: document.getElementById('editCron').value,
+          host: document.getElementById('editHost').value,
+        };
+        await fetch(`/api/scripts/${encodeURIComponent(script.alias)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        closeEditModal();
+        await fetchScripts();
+      };
+
+      // Create form submission
+      document.getElementById('createForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const payload = Object.fromEntries(new FormData(document.getElementById('createForm')));
+        await fetch('/api/scripts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        closeCreateModal();
+        await fetchScripts();
+      };
+
+      // Search functionality
+      searchBox.oninput = (e) => {
+        filterScripts(e.target.value);
+      };
+
+      // Keyboard shortcuts
+      document.addEventListener('keydown', (e) => {
+        if (e.target.matches('input:not(#searchBox), textarea')) return;
+
+        switch(e.key) {
+          case 'ArrowUp':
+            if (e.target === searchBox) return;
+            e.preventDefault();
+            if (e.shiftKey) {
+              const script = getSelectedScript();
+              if (script) moveScript(script.alias, 'up');
+            } else {
+              const scripts = state.searchTerm ? state.filteredScripts : state.scripts;
+              state.selectedIdx = Math.max(0, state.selectedIdx - 1);
+              renderList();
+            }
+            break;
+          case 'ArrowDown':
+            if (e.target === searchBox) return;
+            e.preventDefault();
+            if (e.shiftKey) {
+              const script = getSelectedScript();
+              if (script) moveScript(script.alias, 'down');
+            } else {
+              const scripts = state.searchTerm ? state.filteredScripts : state.scripts;
+              state.selectedIdx = Math.min(scripts.length - 1, state.selectedIdx + 1);
+              renderList();
+            }
+            break;
+          case 'Enter':
+            if (e.target === searchBox) return;
+            e.preventDefault();
+            document.getElementById('runBtn').click();
+            break;
+          case 'Escape':
+            if (searchBox.value) {
+              searchBox.value = '';
+              filterScripts('');
+            } else {
+              document.getElementById('stopBtn').click();
+            }
+            e.preventDefault();
+            break;
+          case 'e':
+          case 'E':
+            if (!e.ctrlKey && !e.metaKey && e.target !== searchBox) {
+              e.preventDefault();
+              document.getElementById('editBtn').click();
+            }
+            break;
+          case 'Delete':
+            if (e.target !== searchBox) {
+              e.preventDefault();
+              document.getElementById('deleteBtn').click();
+            }
+            break;
+          case 'h':
+          case 'H':
+            if (!e.ctrlKey && !e.metaKey && e.target !== searchBox) {
+              e.preventDefault();
+              document.getElementById('historyBtn').click();
+            }
+            break;
+          case 'r':
+          case 'R':
+            if (!e.ctrlKey && !e.metaKey && e.target !== searchBox) {
+              e.preventDefault();
+              document.getElementById('reportBtn').click();
+            }
+            break;
+          case 's':
+          case 'S':
+            if (!e.ctrlKey && !e.metaKey && e.target !== searchBox) {
+              e.preventDefault();
+              document.getElementById('settingsBtn').click();
+            }
+            break;
+          case 'n':
+          case 'N':
+            if (e.ctrlKey || e.metaKey) {
+              e.preventDefault();
+              document.getElementById('newScriptBtn').click();
+            }
+            break;
+          case '/':
+            if (e.target !== searchBox) {
+              e.preventDefault();
+              searchBox.focus();
+            }
+            break;
+          case '?':
+            if (!e.shiftKey) {
+              e.preventDefault();
+              document.getElementById('helpBtn').click();
+            }
+            break;
+          case 'F5':
+            e.preventDefault();
+            document.getElementById('refreshBtn').click();
+            break;
+        }
+      });
+
+      // Close modals on outside click
+      document.querySelectorAll('.modal').forEach(modal => {
+        modal.onclick = (e) => {
+          if (e.target === modal) modal.classList.remove('open');
+        };
+      });
+
+      // Initialize
+      loadSettings();
+      applyTheme(state.settings.theme, state.settings.accent);
+      fetchScripts();
+      connectSSE();
+      
+      // Auto-refresh if enabled
+      if (state.settings.autoRefresh > 0) {
+        setInterval(fetchScripts, state.settings.autoRefresh * 1000);
+      }
+    </script>
+  </body>
+</html>

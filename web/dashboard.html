@@ -1,0 +1,2018 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sctl — Developer Script & Pipeline Controller</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+      :root {
+        --bg: #090d16;
+        --header-bg: rgba(13, 19, 32, 0.95);
+        --panel: #111827;
+        --panel-sub: #162032;
+        --panel-card: #182235;
+        --panel-card-hover: #1f2c45;
+        --panel-card-active: #263654;
+        --border: #1e293b;
+        --border-subtle: #192438;
+        --border-focus: #6366f1;
+        --text: #f8fafc;
+        --text-muted: #94a3b8;
+        --text-dim: #64748b;
+        --accent: #6366f1;
+        --accent-hover: #818cf8;
+        --accent-glow: rgba(99, 102, 241, 0.25);
+        --success: #10b981;
+        --success-glow: rgba(16, 185, 129, 0.25);
+        --fail: #ef4444;
+        --fail-glow: rgba(239, 68, 68, 0.25);
+        --stopped: #f59e0b;
+        --idle: #475569;
+        --shadow-lg: 0 10px 30px -5px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.1);
+        --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
+        --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        --font-mono: 'JetBrains Mono', monospace;
+      }
+
+      * { box-sizing: border-box; }
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        font-family: var(--font-sans);
+        background: var(--bg);
+        color: var(--text);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Scrollbar Styling */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: rgba(15, 23, 42, 0.6);
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #2b3954;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--accent);
+      }
+
+      .app-shell {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+      }
+
+      /* Top Header */
+      .topbar {
+        height: 56px;
+        background: var(--header-bg);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+        backdrop-filter: blur(10px);
+        z-index: 10;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .brand-logo {
+        background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
+        color: white;
+        font-weight: 800;
+        font-size: 0.9rem;
+        padding: 5px 10px;
+        border-radius: 6px;
+        letter-spacing: 1px;
+        box-shadow: 0 0 12px var(--accent-glow);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .brand-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--text);
+        letter-spacing: -0.3px;
+      }
+
+      .brand-tagline {
+        font-size: 0.8rem;
+        color: var(--text-dim);
+        font-weight: 400;
+      }
+
+      .stats-strip {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid var(--border-subtle);
+        padding: 4px 14px;
+        border-radius: 999px;
+        font-size: 0.8rem;
+      }
+
+      .stat-chip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 500;
+        color: var(--text-muted);
+      }
+
+      .stat-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+      }
+
+      .stat-dot.running { background: var(--success); box-shadow: 0 0 8px var(--success); animation: pulse 2s infinite; }
+      .stat-dot.failed { background: var(--fail); box-shadow: 0 0 8px var(--fail); }
+      .stat-dot.idle { background: var(--idle); }
+
+      @keyframes pulse {
+        0% { transform: scale(0.95); opacity: 0.8; }
+        50% { transform: scale(1.15); opacity: 1; }
+        100% { transform: scale(0.95); opacity: 0.8; }
+      }
+
+      .top-controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      /* Action Buttons */
+      .btn {
+        background: var(--accent);
+        color: white;
+        border: none;
+        border-radius: 7px;
+        padding: 8px 14px;
+        font-family: var(--font-sans);
+        font-weight: 600;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        outline: none;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      }
+
+      .btn:hover {
+        background: var(--accent-hover);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 14px var(--accent-glow);
+      }
+
+      .btn:active { transform: translateY(0); }
+
+      .btn-secondary {
+        background: var(--panel-sub);
+        color: var(--text-muted);
+        border: 1px solid var(--border);
+      }
+
+      .btn-secondary:hover {
+        background: var(--panel-card-hover);
+        color: var(--text);
+        border-color: #334155;
+        box-shadow: none;
+      }
+
+      .btn-danger {
+        background: rgba(239, 68, 68, 0.15);
+        color: #fca5a5;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+      }
+
+      .btn-danger:hover {
+        background: var(--fail);
+        color: white;
+        border-color: var(--fail);
+        box-shadow: 0 4px 14px var(--fail-glow);
+      }
+
+      .btn-sm {
+        padding: 5px 10px;
+        font-size: 0.78rem;
+      }
+
+      /* Secondary Navigation & Tab Bar */
+      .subbar {
+        height: 44px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 6px;
+      }
+
+      .tab-btn {
+        background: transparent;
+        color: var(--text-muted);
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 0.88rem;
+        transition: all 0.15s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .tab-btn:hover {
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .tab-btn.active {
+        color: var(--text);
+        background: var(--panel-card);
+        border: 1px solid var(--border);
+      }
+
+      .tab-count {
+        background: rgba(99, 102, 241, 0.15);
+        color: var(--accent-hover);
+        padding: 2px 7px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 700;
+      }
+
+      /* Main Content Container */
+      .main-container {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .tab-content {
+        display: none;
+        width: 100%;
+        height: 100%;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .tab-content.active {
+        display: flex;
+      }
+
+      /* Grid Split View */
+      .split-view {
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        width: 100%;
+        height: 100%;
+        gap: 0;
+        min-height: 0;
+      }
+
+      /* Sidebar Left Panel */
+      .sidebar {
+        background: var(--panel);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        padding: 16px;
+        height: 100%;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .sidebar-top {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      .sidebar-title {
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .search-box {
+        width: 100%;
+        background: var(--panel-sub);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        padding: 9px 12px;
+        font-family: var(--font-sans);
+        font-size: 0.88rem;
+        transition: all 0.15s ease;
+      }
+
+      .search-box:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-glow);
+      }
+
+      /* Script Cards Scrollable List */
+      .list {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding-right: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .script-card {
+        background: var(--panel-card);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        position: relative;
+      }
+
+      .script-card:hover {
+        background: var(--panel-card-hover);
+        border-color: #334155;
+        transform: translateY(-1px);
+      }
+
+      .script-card.selected {
+        background: var(--panel-card-active);
+        border-color: var(--accent);
+        box-shadow: 0 0 16px rgba(99, 102, 241, 0.15);
+      }
+
+      .script-card.multi-selected {
+        border-color: var(--accent);
+        background: rgba(99, 102, 241, 0.12);
+      }
+
+      .script-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+
+      .script-card-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        font-size: 0.92rem;
+        color: var(--text);
+      }
+
+      .checkbox {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .badge-running { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+      .badge-success { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+      .badge-failed { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
+      .badge-stopped { background: rgba(245, 158, 11, 0.15); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.3); }
+      .badge-idle { background: rgba(71, 85, 105, 0.3); color: #94a3b8; border: 1px solid rgba(71, 85, 105, 0.4); }
+
+      .script-card-desc {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 8px;
+        padding-left: 24px;
+      }
+
+      .progress-bar-wrap {
+        height: 5px;
+        background: rgba(15, 23, 42, 0.8);
+        border-radius: 999px;
+        overflow: hidden;
+        margin-left: 24px;
+      }
+
+      .progress-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #6366f1 0%, #10b981 100%);
+        border-radius: 999px;
+        transition: width 0.3s ease;
+      }
+
+      .ssh-chip {
+        background: rgba(15, 76, 129, 0.4);
+        color: #7dd3fc;
+        font-size: 0.68rem;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid rgba(125, 211, 252, 0.3);
+      }
+
+      /* Main Right Detail Panel */
+      .main-panel {
+        background: var(--bg);
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+        overflow: hidden;
+        padding: 20px;
+      }
+
+      .details-header {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .details-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .details-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .details-meta {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 0.83rem;
+        color: var(--text-muted);
+        font-family: var(--font-mono);
+      }
+
+      .meta-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .action-toolbar {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .action-divider {
+        width: 1px;
+        height: 24px;
+        background: var(--border);
+        margin: 0 4px;
+      }
+
+      /* Terminal Log Output Window */
+      .console-window {
+        flex: 1;
+        min-height: 0;
+        background: #050810;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
+      }
+
+      .console-topbar {
+        height: 36px;
+        background: #0e1526;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 14px;
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        color: var(--text-dim);
+      }
+
+      .console-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        color: var(--text-muted);
+      }
+
+      .console-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+
+      .logs-content {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 16px;
+        font-family: var(--font-mono);
+        font-size: 0.85rem;
+        line-height: 1.6;
+        color: #cbd5e1;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .no-selection {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-dim);
+        gap: 12px;
+        text-align: center;
+      }
+
+      .no-selection-icon {
+        font-size: 2.5rem;
+        opacity: 0.5;
+      }
+
+      /* Pipeline View Layout */
+      .pipelines-view {
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        padding: 20px;
+        overflow-y: auto;
+      }
+
+      .pipelines-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+      }
+
+      .pipeline-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 16px;
+      }
+
+      .pipeline-card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .pipeline-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #6366f1 0%, #10b981 100%);
+      }
+
+      .pipeline-card:hover {
+        border-color: var(--accent);
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-lg);
+      }
+
+      .pipeline-card-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin: 0;
+      }
+
+      .pipeline-card-desc {
+        font-size: 0.84rem;
+        color: var(--text-muted);
+      }
+
+      .pipeline-steps-preview {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        background: rgba(15, 23, 42, 0.6);
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--border-subtle);
+        font-size: 0.8rem;
+      }
+
+      .pipeline-step-chip {
+        background: var(--panel-card);
+        padding: 3px 8px;
+        border-radius: 4px;
+        color: var(--text-muted);
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+      }
+
+      /* Modals */
+      .modal-backdrop {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(5, 8, 16, 0.8);
+        backdrop-filter: blur(8px);
+        z-index: 100;
+        align-items: center;
+        justify-content: center;
+        animation: fadeIn 0.15s ease;
+      }
+
+      .modal-backdrop.open {
+        display: flex;
+      }
+
+      .modal-dialog {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        width: 90%;
+        max-width: 650px;
+        max-height: 88vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: var(--shadow-lg);
+        animation: scaleUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        overflow: hidden;
+      }
+
+      .modal-dialog.lg {
+        max-width: 900px;
+      }
+
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes scaleUp { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+      .modal-header {
+        padding: 20px 24px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .modal-title {
+        font-size: 1.2rem;
+        font-weight: 700;
+        margin: 0;
+      }
+
+      .modal-close {
+        background: transparent;
+        border: none;
+        color: var(--text-dim);
+        font-size: 1.4rem;
+        cursor: pointer;
+        line-height: 1;
+        padding: 4px;
+        border-radius: 4px;
+      }
+
+      .modal-close:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+
+      .modal-body {
+        padding: 24px;
+        overflow-y: auto;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .modal-footer {
+        padding: 16px 24px;
+        border-top: 1px solid var(--border);
+        background: rgba(15, 23, 42, 0.4);
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      /* Form Controls */
+      .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .form-label {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--text-muted);
+      }
+
+      .form-input, .form-select, .form-textarea {
+        background: var(--panel-sub);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        padding: 10px 14px;
+        font-family: var(--font-sans);
+        font-size: 0.9rem;
+        transition: all 0.15s ease;
+      }
+
+      .form-input:focus, .form-select:focus, .form-textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-glow);
+      }
+
+      .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+
+      /* Pipeline Graph Canvas */
+      .pipeline-graph-container {
+        width: 100%;
+        background: #080d1a;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        position: relative;
+      }
+
+      canvas#pipelineCanvas {
+        width: 100%;
+        height: 220px;
+        display: block;
+      }
+
+      /* Bottom Keyboard Shortcut Footer Border */
+      .footer-shortcut-bar {
+        height: 36px;
+        background: #0a0f1d;
+        border-top: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        color: var(--text-dim);
+        user-select: none;
+        z-index: 10;
+      }
+
+      .shortcut-items {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        overflow-x: auto;
+      }
+
+      .shortcut-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        white-space: nowrap;
+      }
+
+      .kkey {
+        background: #1e293b;
+        color: #a5b4fc;
+        border: 1px solid rgba(165, 180, 252, 0.2);
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-weight: 700;
+        font-size: 0.72rem;
+      }
+
+      .connection-status {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text-muted);
+      }
+
+      .live-pulse {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--success);
+        box-shadow: 0 0 6px var(--success);
+      }
+
+      /* Multi select bar */
+      .multi-select-bar {
+        background: rgba(99, 102, 241, 0.15);
+        border-bottom: 1px solid var(--accent);
+        padding: 8px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 0.85rem;
+      }
+      .multi-select-bar.hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <!-- TOP HEADER -->
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-logo">⚙ SCTL</div>
+          <div>
+            <span class="brand-title">Script Controller</span>
+            <span class="brand-tagline">Web Dashboard</span>
+          </div>
+        </div>
+
+        <div class="stats-strip" id="statsStrip">
+          <div class="stat-chip"><span class="stat-dot idle"></span><span id="statTotal">0 scripts</span></div>
+          <div class="stat-chip"><span class="stat-dot running"></span><span id="statRunning">0 running</span></div>
+          <div class="stat-chip"><span class="stat-dot failed"></span><span id="statFailed">0 failed</span></div>
+        </div>
+
+        <div class="top-controls">
+          <button type="button" class="btn btn-secondary btn-sm" id="btnNewScript" title="Add Script (A)">➕ New Script</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btnNewPipeline" title="New Pipeline (N)">🔗 New Pipeline</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btnRefresh" title="Refresh Data (F5)">🔄</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btnSettings" title="Settings (S)">⚙</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btnHelp" title="Help (?)">❓</button>
+        </div>
+      </header>
+
+      <!-- SUB HEADER & TABS -->
+      <div class="subbar">
+        <div class="tabs">
+          <button type="button" class="tab-btn active" data-tab="scripts">
+            📋 Scripts <span class="tab-count" id="countScripts">0</span>
+          </button>
+          <button type="button" class="tab-btn" data-tab="pipelines">
+            🔗 Pipelines <span class="tab-count" id="countPipelines">0</span>
+          </button>
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-dim); font-family: var(--font-mono);" id="headerClock">
+          --:--:--
+        </div>
+      </div>
+
+      <!-- MULTI SELECT BAR -->
+      <div id="multiSelectBar" class="multi-select-bar hidden">
+        <span id="multiSelectCount" style="font-weight: 600; color: white;">0 items selected</span>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn btn-sm" id="btnBatchRun">▶ Run Batch (R)</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btnClearSelection">Clear Selection</button>
+        </div>
+      </div>
+
+      <!-- MAIN CONTENT -->
+      <main class="main-container">
+        <!-- SCRIPTS TAB -->
+        <div id="tab-scripts" class="tab-content active">
+          <div class="split-view">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+              <div class="sidebar-top">
+                <div class="sidebar-title">
+                  <span>Script Library</span>
+                  <span style="font-size: 0.75rem; color: var(--text-dim);" id="filteredCount">0 items</span>
+                </div>
+                <input type="text" id="searchBox" class="search-box" placeholder="Filter scripts... (/)" />
+              </div>
+              <div class="list" id="scriptsList">
+                <!-- Script cards appended here dynamically -->
+              </div>
+            </aside>
+
+            <!-- Main Panel Details -->
+            <section class="main-panel">
+              <div id="noScriptSelected" class="no-selection">
+                <div class="no-selection-icon">⚡</div>
+                <div style="font-weight: 600; font-size: 1.1rem; color: var(--text-muted);">No Script Selected</div>
+                <div style="font-size: 0.85rem;">Select a script from the sidebar or press <code class="kkey">↑</code> / <code class="kkey">↓</code> to navigate.</div>
+              </div>
+
+              <div id="scriptDetailPanel" style="display: none; flex-direction: column; height: 100%;">
+                <div class="details-header">
+                  <div class="details-title-row">
+                    <h2 class="details-title" id="detTitle">Script Name</h2>
+                    <span class="badge badge-idle" id="detBadge">IDLE</span>
+                  </div>
+                  <div class="details-meta">
+                    <div class="meta-item"><span>Task:</span> <strong id="detTaskID" style="color: var(--text);">#0</strong></div>
+                    <div class="meta-item"><span>Cmd:</span> <code id="detCommand" style="color: var(--accent-hover);">--</code></div>
+                    <div class="meta-item" id="detSSHHostWrap" style="display:none;"><span>Host:</span> <span class="ssh-chip" id="detSSHHost"></span></div>
+                  </div>
+                  <div class="progress-bar-wrap">
+                    <div class="progress-bar-fill" id="detProgress" style="width: 0%;"></div>
+                  </div>
+                  <div class="action-toolbar">
+                    <button type="button" class="btn btn-sm" id="btnRun">▶ Run (Enter)</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btnStop">⏹ Stop (Esc)</button>
+                    <div class="action-divider"></div>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btnEdit">✏ Edit (E)</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btnHistory">📊 History (H)</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btnReport">📄 Report</button>
+                    <div class="action-divider"></div>
+                    <button type="button" class="btn btn-danger btn-sm" id="btnDelete">🗑 Delete (Del)</button>
+                  </div>
+                </div>
+
+                <!-- Console Window -->
+                <div class="console-window">
+                  <div class="console-topbar">
+                    <div class="console-title">
+                      <span class="console-dot" id="consoleStatusDot" style="background: var(--idle);"></span>
+                      <span>Output Log Console</span>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                      <button type="button" class="btn btn-secondary btn-sm" id="btnClearLogs" style="padding: 2px 8px; font-size: 0.72rem;">Clear</button>
+                      <button type="button" class="btn btn-secondary btn-sm" id="btnCopyLogs" style="padding: 2px 8px; font-size: 0.72rem;">Copy</button>
+                    </div>
+                  </div>
+                  <pre class="logs-content" id="logsOutput">No output logs yet.</pre>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <!-- PIPELINES TAB -->
+        <div id="tab-pipelines" class="tab-content">
+          <div class="pipelines-view">
+            <div class="pipelines-header">
+              <div>
+                <h2 style="margin: 0; font-size: 1.3rem;">Script Pipelines</h2>
+                <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">Chain scripts into automated sequential execution workflows</div>
+              </div>
+              <button type="button" class="btn" id="btnCreatePipelineTop">➕ Create Pipeline</button>
+            </div>
+            <div class="pipeline-grid" id="pipelinesGrid">
+              <!-- Pipeline cards dynamically loaded -->
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- BOTTOM KEYBOARD SHORTCUT FOOTER BORDER -->
+      <footer class="footer-shortcut-bar">
+        <div class="shortcut-items">
+          <div class="shortcut-item"><span class="kkey">1/2</span> Tabs</div>
+          <div class="shortcut-item"><span class="kkey">/</span> Filter</div>
+          <div class="shortcut-item"><span class="kkey">↑/↓</span> Navigate</div>
+          <div class="shortcut-item"><span class="kkey">Enter/R</span> Run</div>
+          <div class="shortcut-item"><span class="kkey">S</span> Stop</div>
+          <div class="shortcut-item"><span class="kkey">H</span> History</div>
+          <div class="shortcut-item"><span class="kkey">A</span> New Script</div>
+          <div class="shortcut-item"><span class="kkey">N</span> New Pipeline</div>
+          <div class="shortcut-item"><span class="kkey">E</span> Edit</div>
+          <div class="shortcut-item"><span class="kkey">Del</span> Delete</div>
+          <div class="shortcut-item"><span class="kkey">Esc</span> Close</div>
+          <div class="shortcut-item"><span class="kkey">?</span> Help</div>
+        </div>
+        <div class="connection-status">
+          <span class="live-pulse"></span>
+          <span id="sseStatus">Live SSE Connected</span>
+        </div>
+      </footer>
+    </div>
+
+    <!-- MODALS -->
+
+    <!-- Execution History Modal -->
+    <div class="modal-backdrop" id="modalHistory">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title" id="historyModalTitle">Execution History</h3>
+            <div style="font-size: 0.83rem; color: var(--text-muted);" id="historyModalSub">Past execution tasks log</div>
+          </div>
+          <button type="button" class="modal-close" data-close="modalHistory">&times;</button>
+        </div>
+        <div class="modal-body" style="gap: 12px;">
+          <div id="historyListContainer" style="display: flex; flex-direction: column; gap: 8px; max-height: 350px; overflow-y: auto;">
+            <!-- Past runs rendered here -->
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close="modalHistory">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create / Edit Script Modal -->
+    <div class="modal-backdrop" id="modalScript">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title" id="modalScriptTitle">Add New Script</h3>
+          <button type="button" class="modal-close" data-close="modalScript">&times;</button>
+        </div>
+        <form id="formScript">
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Script Alias (Unique Name)</label>
+              <input type="text" id="scriptAlias" class="form-input" placeholder="e.g. system_backup" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Description</label>
+              <input type="text" id="scriptDesc" class="form-input" placeholder="e.g. Daily system cleanup and logs archive" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Shell Command</label>
+              <input type="text" id="scriptCmd" class="form-input" placeholder="e.g. ./backup.sh --all" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Output Folder Path</label>
+              <input type="text" id="scriptOutputFolder" class="form-input" placeholder="e.g. ./output/backup" required />
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Cron Schedule (Optional)</label>
+                <input type="text" id="scriptCron" class="form-input" placeholder="e.g. */15 * * * *" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">SSH Host (Optional)</label>
+                <input type="text" id="scriptHost" class="form-input" placeholder="e.g. user@192.168.1.50" />
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-close="modalScript">Cancel</button>
+            <button type="submit" class="btn">💾 Save Script</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Create / Edit Pipeline Modal -->
+    <div class="modal-backdrop" id="modalPipeline">
+      <div class="modal-dialog lg">
+        <div class="modal-header">
+          <h3 class="modal-title" id="modalPipelineTitle">Create Script Pipeline</h3>
+          <button type="button" class="modal-close" data-close="modalPipeline">&times;</button>
+        </div>
+        <form id="formPipeline">
+          <div class="modal-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Pipeline Name</label>
+                <input type="text" id="pipeName" class="form-input" placeholder="e.g. Production Deploy Sequence" required />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Description</label>
+                <input type="text" id="pipeDesc" class="form-input" placeholder="e.g. Build, test, and release pipeline" />
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px;">
+              <div style="background: var(--panel-sub); border: 1px solid var(--border); border-radius: 10px; padding: 14px;">
+                <label class="form-label" style="margin-bottom: 10px; display: block;">Available Scripts (Click to add step)</label>
+                <div id="pipeAvailableScripts" style="display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto;">
+                  <!-- Dynamic available scripts -->
+                </div>
+              </div>
+              <div style="background: var(--panel-sub); border: 1px solid var(--border); border-radius: 10px; padding: 14px;">
+                <label class="form-label" style="margin-bottom: 10px; display: block;">Pipeline Steps Sequence</label>
+                <div id="pipeStepList" style="display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto;">
+                  <!-- Selected steps -->
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-close="modalPipeline">Cancel</button>
+            <button type="submit" class="btn">Save Pipeline</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Pipeline Detail Modal (Professional Canvas Graph & Steps View) -->
+    <div class="modal-backdrop" id="modalPipelineDetail">
+      <div class="modal-dialog lg">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title" id="pipeDetTitle">Pipeline Details</h3>
+            <div id="pipeDetDesc" style="font-size: 0.83rem; color: var(--text-muted); margin-top: 2px;"></div>
+          </div>
+          <button type="button" class="modal-close" data-close="modalPipelineDetail">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="pipeline-graph-container">
+            <canvas id="pipelineCanvas"></canvas>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 10px;">
+            <div>
+              <label class="form-label" style="margin-bottom: 8px; display: block;">Pipeline Step Execution</label>
+              <div id="pipeDetStepList" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto;"></div>
+            </div>
+            <div>
+              <label class="form-label" style="margin-bottom: 8px; display: block;">Execution Output</label>
+              <pre class="logs-content" id="pipeDetLogs" style="height: 200px; background: #050810; border: 1px solid var(--border); border-radius: 8px; margin: 0;"></pre>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="justify-content: space-between;">
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn" id="btnRunPipelineModal">▶ Run Pipeline</button>
+            <button type="button" class="btn btn-secondary" id="btnStopPipelineModal">⏹ Stop</button>
+            <button type="button" class="btn btn-danger" id="btnDeletePipelineModal">🗑 Delete</button>
+          </div>
+          <button type="button" class="btn btn-secondary" data-close="modalPipelineDetail">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-backdrop" id="modalSettings">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">Settings</h3>
+          <button type="button" class="modal-close" data-close="modalSettings">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Auto Refresh Frequency</label>
+            <select class="form-select" id="settingAutoRefresh">
+              <option value="0">Disabled</option>
+              <option value="5">Every 5 Seconds</option>
+              <option value="10" selected>Every 10 Seconds</option>
+              <option value="30">Every 30 Seconds</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" data-close="modalSettings">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div class="modal-backdrop" id="modalHelp">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title">Keyboard Shortcuts Guide</h3>
+          <button type="button" class="modal-close" data-close="modalHelp">&times;</button>
+        </div>
+        <div class="modal-body" style="font-family: var(--font-mono); font-size: 0.85rem; line-height: 1.8;">
+          <div style="display: grid; grid-template-columns: 100px 1fr; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+            <div><span class="kkey">1</span> / <span class="kkey">2</span></div>
+            <div>Switch between Scripts and Pipelines tabs</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 100px 1fr; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+            <div><span class="kkey">↑</span> / <span class="kkey">↓</span></div>
+            <div>Navigate script cards list</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 100px 1fr; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+            <div><span class="kkey">/</span></div>
+            <div>Focus search / filter input</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 100px 1fr; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+            <div><span class="kkey">Enter</span> / <span class="kkey">R</span></div>
+            <div>Run selected script or batch</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 100px 1fr; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+            <div><span class="kkey">S</span></div>
+            <div>Stop currently selected running script</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 100px 1fr; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+            <div><span class="kkey">H</span></div>
+            <div>View script run history</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 100px 1fr; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+            <div><span class="kkey">A</span> / <span class="kkey">N</span></div>
+            <div>Add script (A) or Add pipeline (N)</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 100px 1fr; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+            <div><span class="kkey">E</span> / <span class="kkey">Del</span></div>
+            <div>Edit script (E) or Delete script (Del)</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 100px 1fr; gap: 8px;">
+            <div><span class="kkey">Esc</span></div>
+            <div>Close modal or clear search/selection</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" data-close="modalHelp">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+      const appState = {
+        scripts: [],
+        filteredScripts: [],
+        selectedIdx: 0,
+        selectedAliases: new Set(),
+        searchTerm: '',
+        pipelines: [],
+        editingScriptAlias: null,
+        currentPipelineSteps: [],
+        activePipelineId: null,
+        settings: { autoRefresh: 10 },
+        eventSource: null
+      };
+
+      // Elements
+      const searchBox = document.getElementById('searchBox');
+      const scriptsList = document.getElementById('scriptsList');
+      const noSelection = document.getElementById('noScriptSelected');
+      const scriptDetailPanel = document.getElementById('scriptDetailPanel');
+      const logsOutput = document.getElementById('logsOutput');
+      const multiSelectBar = document.getElementById('multiSelectBar');
+
+      // Clock
+      function updateClock() {
+        document.getElementById('headerClock').textContent = new Date().toLocaleTimeString();
+      }
+      setInterval(updateClock, 1000);
+      updateClock();
+
+      // Tab Switching
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.onclick = () => {
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+          btn.classList.add('active');
+          const targetTab = document.getElementById(`tab-${btn.dataset.tab}`);
+          if (targetTab) targetTab.classList.add('active');
+          if (btn.dataset.tab === 'pipelines') renderPipelines();
+        };
+      });
+
+      // Modal Helpers
+      function openModal(id) {
+        const m = document.getElementById(id);
+        if (m) m.classList.add('open');
+      }
+      function closeModal(id) {
+        const m = document.getElementById(id);
+        if (m) m.classList.remove('open');
+      }
+      document.querySelectorAll('[data-close]').forEach(el => {
+        el.onclick = () => closeModal(el.dataset.close);
+      });
+      document.querySelectorAll('.modal-backdrop').forEach(m => {
+        m.onclick = (e) => { if (e.target === m) closeModal(m.id); };
+      });
+
+      // Filter Scripts
+      function filterScripts(term) {
+        appState.searchTerm = term.toLowerCase();
+        if (!term) {
+          appState.filteredScripts = [...appState.scripts];
+        } else {
+          appState.filteredScripts = appState.scripts.filter(s =>
+            s.alias.toLowerCase().includes(appState.searchTerm) ||
+            (s.description && s.description.toLowerCase().includes(appState.searchTerm)) ||
+            (s.command && s.command.toLowerCase().includes(appState.searchTerm))
+          );
+        }
+        if (appState.selectedIdx >= appState.filteredScripts.length) {
+          appState.selectedIdx = Math.max(0, appState.filteredScripts.length - 1);
+        }
+        renderScriptsList();
+      }
+
+      searchBox.oninput = (e) => filterScripts(e.target.value);
+
+      // Render Scripts List
+      function renderScriptsList() {
+        const list = appState.filteredScripts;
+        document.getElementById('countScripts').textContent = appState.scripts.length;
+        document.getElementById('filteredCount').textContent = `${list.length} of ${appState.scripts.length}`;
+
+        // Header Stats
+        let runningCount = 0, failedCount = 0;
+        appState.scripts.forEach(s => {
+          if (s.state === 'Running') runningCount++;
+          if (s.state === 'Failed') failedCount++;
+        });
+        document.getElementById('statTotal').textContent = `${appState.scripts.length} scripts`;
+        document.getElementById('statRunning').textContent = `${runningCount} running`;
+        document.getElementById('statFailed').textContent = `${failedCount} failed`;
+
+        if (list.length === 0) {
+          scriptsList.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--text-dim); font-size: 0.85rem;">No matching scripts found</div>`;
+          noSelection.style.display = 'flex';
+          scriptDetailPanel.style.display = 'none';
+          return;
+        }
+
+        scriptsList.innerHTML = list.map((script, idx) => {
+          const isSel = idx === appState.selectedIdx;
+          const isChecked = appState.selectedAliases.has(script.alias);
+          const stateClass = (script.state || 'idle').toLowerCase();
+          return `
+            <div class="script-card ${isSel ? 'selected' : ''} ${isChecked ? 'multi-selected' : ''}" data-idx="${idx}" data-alias="${script.alias}">
+              <div class="script-card-header">
+                <div class="script-card-title">
+                  <input type="checkbox" class="checkbox" ${isChecked ? 'checked' : ''} data-alias="${script.alias}" onclick="event.stopPropagation();" />
+                  <span>${script.alias}</span>
+                </div>
+                <span class="badge badge-${stateClass}">${script.state || 'IDLE'}</span>
+              </div>
+              ${script.description ? `<div class="script-card-desc">${script.description}</div>` : ''}
+              <div class="progress-bar-wrap">
+                <div class="progress-bar-fill" style="width: ${script.progress || 0}%;"></div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // Event listeners for cards
+        scriptsList.querySelectorAll('.script-card').forEach(card => {
+          card.onclick = (e) => {
+            const idx = parseInt(card.dataset.idx);
+            if (e.ctrlKey || e.metaKey) {
+              const alias = card.dataset.alias;
+              if (appState.selectedAliases.has(alias)) appState.selectedAliases.delete(alias);
+              else appState.selectedAliases.add(alias);
+            } else {
+              appState.selectedIdx = idx;
+            }
+            updateMultiSelect();
+            renderScriptsList();
+          };
+
+          const cb = card.querySelector('.checkbox');
+          if (cb) {
+            cb.onchange = (e) => {
+              const alias = e.target.dataset.alias;
+              if (e.target.checked) appState.selectedAliases.add(alias);
+              else appState.selectedAliases.delete(alias);
+              updateMultiSelect();
+              renderScriptsList();
+            };
+          }
+        });
+
+        renderScriptDetail();
+      }
+
+      function updateMultiSelect() {
+        if (appState.selectedAliases.size > 0) {
+          multiSelectBar.classList.remove('hidden');
+          document.getElementById('multiSelectCount').textContent = `${appState.selectedAliases.size} scripts selected`;
+        } else {
+          multiSelectBar.classList.add('hidden');
+        }
+      }
+
+      document.getElementById('btnClearSelection').onclick = () => {
+        appState.selectedAliases.clear();
+        updateMultiSelect();
+        renderScriptsList();
+      };
+
+      // Get Current Selected Script
+      function getSelectedScript() {
+        return appState.filteredScripts[appState.selectedIdx] || null;
+      }
+
+      // Render Script Detail
+      function renderScriptDetail() {
+        const script = getSelectedScript();
+        if (!script) {
+          noSelection.style.display = 'flex';
+          scriptDetailPanel.style.display = 'none';
+          return;
+        }
+
+        noSelection.style.display = 'none';
+        scriptDetailPanel.style.display = 'flex';
+
+        document.getElementById('detTitle').textContent = script.alias;
+        document.getElementById('detBadge').textContent = (script.state || 'IDLE').toUpperCase();
+        document.getElementById('detBadge').className = `badge badge-${(script.state || 'idle').toLowerCase()}`;
+        document.getElementById('detTaskID').textContent = `#${script.taskId || 0}`;
+        document.getElementById('detCommand').textContent = script.command || 'N/A';
+        document.getElementById('detProgress').style.width = `${script.progress || 0}%`;
+
+        if (script.host) {
+          document.getElementById('detSSHHostWrap').style.display = 'flex';
+          document.getElementById('detSSHHost').textContent = `SSH: ${script.host}`;
+        } else {
+          document.getElementById('detSSHHostWrap').style.display = 'none';
+        }
+
+        const dot = document.getElementById('consoleStatusDot');
+        if (script.state === 'Running') dot.style.background = 'var(--success)';
+        else if (script.state === 'Failed') dot.style.background = 'var(--fail)';
+        else dot.style.background = 'var(--idle)';
+
+        logsOutput.textContent = script.logs || 'No output logs yet.';
+        logsOutput.scrollTop = logsOutput.scrollHeight;
+      }
+
+      // Auto Scroll card into view
+      function scrollToSelectedCard() {
+        const selCard = scriptsList.querySelector('.script-card.selected');
+        if (selCard) {
+          selCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      }
+
+      // API Actions
+      async function fetchScripts() {
+        try {
+          const res = await fetch('/api/scripts');
+          const data = await res.json();
+          appState.scripts = data.scripts || [];
+          filterScripts(appState.searchTerm);
+        } catch (err) {
+          console.error('Fetch error:', err);
+        }
+      }
+
+      function connectSSE() {
+        if (appState.eventSource) appState.eventSource.close();
+        appState.eventSource = new EventSource('/api/stream');
+        appState.eventSource.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            appState.scripts = data.scripts || [];
+            filterScripts(appState.searchTerm);
+            document.getElementById('sseStatus').textContent = 'Live SSE Stream Connected';
+          } catch (err) {
+            console.error(err);
+          }
+        };
+        appState.eventSource.onerror = () => {
+          document.getElementById('sseStatus').textContent = 'SSE Reconnecting...';
+        };
+      }
+
+      async function runScript(alias) {
+        await fetch(`/api/scripts/${encodeURIComponent(alias)}/run`, { method: 'POST' });
+        setTimeout(fetchScripts, 100);
+      }
+
+      async function stopScript(alias) {
+        await fetch(`/api/scripts/${encodeURIComponent(alias)}/stop`, { method: 'POST' });
+        setTimeout(fetchScripts, 100);
+      }
+
+      async function deleteScript(alias) {
+        if (!confirm(`Are you sure you want to delete "${alias}"?`)) return;
+        await fetch(`/api/scripts/${encodeURIComponent(alias)}`, { method: 'DELETE' });
+        appState.selectedIdx = 0;
+        await fetchScripts();
+      }
+
+      document.getElementById('btnRun').onclick = () => { const s = getSelectedScript(); if (s) runScript(s.alias); };
+      document.getElementById('btnStop').onclick = () => { const s = getSelectedScript(); if (s) stopScript(s.alias); };
+      document.getElementById('btnDelete').onclick = () => { const s = getSelectedScript(); if (s) deleteScript(s.alias); };
+      document.getElementById('btnBatchRun').onclick = async () => {
+        if (appState.selectedAliases.size === 0) return;
+        const aliases = Array.from(appState.selectedAliases);
+        await fetch('/api/run-batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ aliases })
+        });
+        appState.selectedAliases.clear();
+        updateMultiSelect();
+        setTimeout(fetchScripts, 100);
+      };
+
+      document.getElementById('btnClearLogs').onclick = () => { logsOutput.textContent = 'Logs cleared.'; };
+      document.getElementById('btnCopyLogs').onclick = () => {
+        navigator.clipboard.writeText(logsOutput.textContent);
+        alert('Logs copied to clipboard!');
+      };
+
+      document.getElementById('btnReport').onclick = () => {
+        const s = getSelectedScript();
+        if (s) window.open(`/api/scripts/${encodeURIComponent(s.alias)}/report`, '_blank');
+      };
+
+      document.getElementById('btnHistory').onclick = async () => {
+        const s = getSelectedScript();
+        if (!s) return;
+        document.getElementById('historyModalTitle').textContent = `Execution History — ${s.alias}`;
+        document.getElementById('historyModalSub').textContent = `Past task runs for ${s.alias}`;
+        const container = document.getElementById('historyListContainer');
+        container.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-dim);">Loading task history...</div>`;
+        openModal('modalHistory');
+
+        try {
+          const res = await fetch(`/api/scripts/${encodeURIComponent(s.alias)}/history`);
+          if (!res.ok) throw new Error('History unavailable');
+          const history = await res.json();
+          if (!history || history.length === 0) {
+            container.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-dim);">No past execution history found.</div>`;
+            return;
+          }
+
+          container.innerHTML = history.map(item => `
+            <div style="background: var(--panel-card); padding: 12px; border-radius: 8px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <strong style="color: var(--text); font-size: 0.9rem;">Task #${item.TaskID}</strong>
+                <div style="font-size: 0.78rem; color: var(--text-muted); font-family: var(--font-mono); margin-top: 2px;">
+                  ${item.Timestamp ? new Date(item.Timestamp).toLocaleString() : 'N/A'}
+                </div>
+              </div>
+              <span class="badge badge-${(item.State || 'idle').toLowerCase()}">${(item.State || 'UNKNOWN').toUpperCase()}</span>
+            </div>
+          `).join('');
+        } catch (err) {
+          container.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--fail);">Failed to load history tasks.</div>`;
+        }
+      };
+
+      // Add / Edit Script Form
+      document.getElementById('btnNewScript').onclick = () => {
+        appState.editingScriptAlias = null;
+        document.getElementById('modalScriptTitle').textContent = 'Add New Script';
+        document.getElementById('scriptAlias').value = '';
+        document.getElementById('scriptAlias').readOnly = false;
+        document.getElementById('scriptDesc').value = '';
+        document.getElementById('scriptCmd').value = '';
+        document.getElementById('scriptOutputFolder').value = './output/' + Date.now();
+        document.getElementById('scriptCron').value = '';
+        document.getElementById('scriptHost').value = '';
+        openModal('modalScript');
+      };
+
+      document.getElementById('btnEdit').onclick = () => {
+        const s = getSelectedScript();
+        if (!s) return;
+        appState.editingScriptAlias = s.alias;
+        document.getElementById('modalScriptTitle').textContent = `Edit Script — ${s.alias}`;
+        document.getElementById('scriptAlias').value = s.alias;
+        document.getElementById('scriptAlias').readOnly = true;
+        document.getElementById('scriptDesc').value = s.description || '';
+        document.getElementById('scriptCmd').value = s.command || '';
+        document.getElementById('scriptOutputFolder').value = s.outputFolderPath || s.outputFolder || './output/' + s.alias;
+        document.getElementById('scriptCron').value = s.cron || '';
+        document.getElementById('scriptHost').value = s.host || '';
+        openModal('modalScript');
+      };
+
+      document.getElementById('formScript').onsubmit = async (e) => {
+        e.preventDefault();
+        const payload = {
+          name_alias: document.getElementById('scriptAlias').value,
+          description: document.getElementById('scriptDesc').value,
+          command: document.getElementById('scriptCmd').value,
+          output_folder_path: document.getElementById('scriptOutputFolder').value,
+          cron: document.getElementById('scriptCron').value,
+          host: document.getElementById('scriptHost').value
+        };
+
+        if (appState.editingScriptAlias) {
+          await fetch(`/api/scripts/${encodeURIComponent(appState.editingScriptAlias)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        } else {
+          await fetch('/api/scripts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
+        closeModal('modalScript');
+        await fetchScripts();
+      };
+
+      // PIPELINES FEATURE
+      function loadPipelines() {
+        appState.pipelines = JSON.parse(localStorage.getItem('sctlPipelines') || '[]');
+        document.getElementById('countPipelines').textContent = appState.pipelines.length;
+      }
+
+      function savePipelines() {
+        localStorage.setItem('sctlPipelines', JSON.stringify(appState.pipelines));
+        document.getElementById('countPipelines').textContent = appState.pipelines.length;
+      }
+
+      function renderPipelines() {
+        loadPipelines();
+        const grid = document.getElementById('pipelinesGrid');
+        if (appState.pipelines.length === 0) {
+          grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-dim);">No script pipelines created yet. Click "Create Pipeline" to get started.</div>`;
+          return;
+        }
+
+        grid.innerHTML = appState.pipelines.map(p => `
+          <div class="pipeline-card" onclick="openPipelineDetail('${p.id}')">
+            <h3 class="pipeline-card-title">${p.name}</h3>
+            <div class="pipeline-card-desc">${p.description || 'No description provided'}</div>
+            <div class="pipeline-steps-preview">
+              <strong style="color: var(--accent-hover);">${p.steps.length} Steps:</strong>
+              ${p.steps.map(s => `<span class="pipeline-step-chip">${s}</span>`).join('')}
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+              <span class="badge badge-${(p.status || 'idle').toLowerCase()}">${(p.status || 'IDLE').toUpperCase()}</span>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); runPipeline('${p.id}');">▶ Run</button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      document.getElementById('btnNewPipeline').onclick =
+      document.getElementById('btnCreatePipelineTop').onclick = () => {
+        appState.currentPipelineSteps = [];
+        document.getElementById('pipeName').value = '';
+        document.getElementById('pipeDesc').value = '';
+        renderPipelineBuilder();
+        openModal('modalPipeline');
+      };
+
+      function renderPipelineBuilder() {
+        const avail = document.getElementById('pipeAvailableScripts');
+        avail.innerHTML = appState.scripts.map(s => `
+          <div style="background: var(--panel-card); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="addScriptToPipeline('${s.alias}')">
+            <span style="font-weight: 600; font-size: 0.85rem;">${s.alias}</span>
+            <span style="color: var(--accent); font-size: 0.8rem;">+ Add</span>
+          </div>
+        `).join('');
+
+        const steps = document.getElementById('pipeStepList');
+        if (appState.currentPipelineSteps.length === 0) {
+          steps.innerHTML = `<div style="color: var(--text-dim); font-size: 0.8rem; text-align: center; padding: 20px;">No steps added yet</div>`;
+          return;
+        }
+
+        steps.innerHTML = appState.currentPipelineSteps.map((alias, idx) => `
+          <div style="background: var(--panel-card); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <span class="kkey">${idx + 1}</span>
+              <span style="font-weight: 600; font-size: 0.85rem; margin-left: 6px;">${alias}</span>
+            </div>
+            <button type="button" class="btn btn-danger btn-sm" style="padding: 2px 6px; font-size: 0.7rem;" onclick="removeScriptFromPipeline(${idx})">Remove</button>
+          </div>
+        `).join('');
+      }
+
+      function addScriptToPipeline(alias) {
+        appState.currentPipelineSteps.push(alias);
+        renderPipelineBuilder();
+      }
+
+      function removeScriptFromPipeline(idx) {
+        appState.currentPipelineSteps.splice(idx, 1);
+        renderPipelineBuilder();
+      }
+
+      document.getElementById('formPipeline').onsubmit = (e) => {
+        e.preventDefault();
+        const p = {
+          id: 'pipe_' + Date.now(),
+          name: document.getElementById('pipeName').value,
+          description: document.getElementById('pipeDesc').value,
+          steps: appState.currentPipelineSteps,
+          status: 'idle',
+          stepStatus: appState.currentPipelineSteps.map(() => 'idle'),
+          logs: ''
+        };
+        appState.pipelines.push(p);
+        savePipelines();
+        closeModal('modalPipeline');
+        renderPipelines();
+      };
+
+      function openPipelineDetail(id) {
+        const p = appState.pipelines.find(x => x.id === id);
+        if (!p) return;
+        appState.activePipelineId = id;
+        document.getElementById('pipeDetTitle').textContent = p.name;
+        document.getElementById('pipeDetDesc').textContent = p.description || 'No description';
+
+        document.getElementById('pipeDetStepList').innerHTML = p.steps.map((s, idx) => `
+          <div style="background: var(--panel-card); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="kkey">Step ${idx + 1}</span>
+              <strong style="font-size: 0.9rem;">${s}</strong>
+            </div>
+            <span class="badge badge-${(p.stepStatus?.[idx] || 'idle').toLowerCase()}">${(p.stepStatus?.[idx] || 'IDLE').toUpperCase()}</span>
+          </div>
+        `).join('');
+
+        document.getElementById('pipeDetLogs').textContent = p.logs || 'No execution logs yet.';
+
+        drawPipelineGraph(p);
+        openModal('modalPipelineDetail');
+      }
+
+      function drawPipelineGraph(p) {
+        const canvas = document.getElementById('pipelineCanvas');
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = canvas.offsetWidth * dpr;
+        canvas.height = canvas.offsetHeight * dpr;
+        ctx.scale(dpr, dpr);
+
+        const w = canvas.offsetWidth;
+        const h = canvas.offsetHeight;
+        ctx.clearRect(0, 0, w, h);
+
+        if (!p || p.steps.length === 0) return;
+
+        const count = p.steps.length;
+        const radius = 28;
+        const spacing = Math.min(180, (w - 100) / Math.max(1, count - 1));
+        const startX = (w - (count - 1) * spacing) / 2;
+        const centerY = h / 2;
+
+        p.steps.forEach((step, idx) => {
+          const x = startX + idx * spacing;
+          const y = centerY;
+
+          // Arrow connections
+          if (idx < count - 1) {
+            const nextX = startX + (idx + 1) * spacing;
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(nextX - radius, y);
+            ctx.stroke();
+
+            // Arrow head
+            ctx.fillStyle = '#6366f1';
+            ctx.beginPath();
+            ctx.moveTo(nextX - radius, y);
+            ctx.lineTo(nextX - radius - 8, y - 5);
+            ctx.lineTo(nextX - radius - 8, y + 5);
+            ctx.fill();
+          }
+
+          // Node Circle
+          const status = p.stepStatus?.[idx] || 'idle';
+          let nodeColor = '#334155';
+          if (status === 'success') nodeColor = '#10b981';
+          else if (status === 'failed') nodeColor = '#ef4444';
+          else if (status === 'running') nodeColor = '#6366f1';
+
+          ctx.fillStyle = '#0f172a';
+          ctx.strokeStyle = nodeColor;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          // Step Number
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 14px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(idx + 1, x, y);
+
+          // Step Label
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '500 12px Inter, sans-serif';
+          ctx.fillText(step.length > 14 ? step.substring(0, 12) + '..' : step, x, y + radius + 18);
+        });
+      }
+
+      async function runPipeline(id) {
+        const p = appState.pipelines.find(x => x.id === id);
+        if (!p) return;
+        p.status = 'running';
+        p.logs = `[${new Date().toLocaleTimeString()}] Pipeline "${p.name}" execution started...\n`;
+        savePipelines();
+        if (appState.activePipelineId === id) openPipelineDetail(id);
+
+        for (let i = 0; i < p.steps.length; i++) {
+          p.stepStatus[i] = 'running';
+          p.logs += `Executing Step ${i + 1}: ${p.steps[i]}...\n`;
+          savePipelines();
+          if (appState.activePipelineId === id) openPipelineDetail(id);
+
+          await runScript(p.steps[i]);
+          await new Promise(r => setTimeout(r, 2000));
+          p.stepStatus[i] = 'success';
+          p.logs += `Step ${i + 1} (${p.steps[i]}) completed successfully.\n`;
+          savePipelines();
+          if (appState.activePipelineId === id) openPipelineDetail(id);
+        }
+
+        p.status = 'success';
+        p.logs += `[${new Date().toLocaleTimeString()}] Pipeline completed!\n`;
+        savePipelines();
+        renderPipelines();
+        if (appState.activePipelineId === id) openPipelineDetail(id);
+      }
+
+      document.getElementById('btnRunPipelineModal').onclick = () => {
+        if (appState.activePipelineId) runPipeline(appState.activePipelineId);
+      };
+      document.getElementById('btnDeletePipelineModal').onclick = () => {
+        if (!appState.activePipelineId) return;
+        if (!confirm('Delete this pipeline?')) return;
+        appState.pipelines = appState.pipelines.filter(x => x.id !== appState.activePipelineId);
+        savePipelines();
+        closeModal('modalPipelineDetail');
+        renderPipelines();
+      };
+
+      // Control buttons
+      document.getElementById('btnRefresh').onclick = fetchScripts;
+      document.getElementById('btnSettings').onclick = () => openModal('modalSettings');
+      document.getElementById('btnHelp').onclick = () => openModal('modalHelp');
+
+      // KEYBOARD SHORTCUT LISTENERS
+      document.addEventListener('keydown', (e) => {
+        // If target is inside an input, textarea, select, or button, don't hijack Enter
+        if (e.target.matches('input, textarea, select, button')) {
+          if (e.key === 'Escape') {
+            e.target.blur();
+            closeModal('modalScript');
+            closeModal('modalPipeline');
+            closeModal('modalSettings');
+            closeModal('modalHelp');
+            closeModal('modalHistory');
+            closeModal('modalPipelineDetail');
+          }
+          if (e.key === 'Enter' && e.target.tagName === 'BUTTON') {
+            return;
+          }
+          if (e.target.matches('input, textarea, select')) {
+            return;
+          }
+        }
+
+        const isModalOpen = document.querySelector('.modal-backdrop.open');
+        if (isModalOpen) {
+          if (e.key === 'Escape') {
+            document.querySelectorAll('.modal-backdrop.open').forEach(m => m.classList.remove('open'));
+          }
+          return;
+        }
+
+        const key = e.key.toLowerCase();
+
+        switch (key) {
+          case '1':
+            document.querySelector('[data-tab="scripts"]').click();
+            break;
+          case '2':
+            document.querySelector('[data-tab="pipelines"]').click();
+            break;
+          case '/':
+            e.preventDefault();
+            searchBox.focus();
+            break;
+          case 'arrowup':
+            e.preventDefault();
+            if (appState.filteredScripts.length > 0) {
+              appState.selectedIdx = Math.max(0, appState.selectedIdx - 1);
+              renderScriptsList();
+              scrollToSelectedCard();
+            }
+            break;
+          case 'arrowdown':
+            e.preventDefault();
+            if (appState.filteredScripts.length > 0) {
+              appState.selectedIdx = Math.min(appState.filteredScripts.length - 1, appState.selectedIdx + 1);
+              renderScriptsList();
+              scrollToSelectedCard();
+            }
+            break;
+          case 'enter':
+            e.preventDefault();
+            const s = getSelectedScript();
+            if (s) runScript(s.alias);
+            break;
+          case 'r':
+            e.preventDefault();
+            if (appState.selectedAliases.size > 0) document.getElementById('btnBatchRun').click();
+            else {
+              const scriptToRun = getSelectedScript();
+              if (scriptToRun) runScript(scriptToRun.alias);
+            }
+            break;
+          case 's':
+            e.preventDefault();
+            document.getElementById('btnStop').click();
+            break;
+          case 'h':
+            e.preventDefault();
+            document.getElementById('btnHistory').click();
+            break;
+          case 'a':
+            e.preventDefault();
+            document.getElementById('btnNewScript').click();
+            break;
+          case 'n':
+            e.preventDefault();
+            document.getElementById('btnNewPipeline').click();
+            break;
+          case 'e':
+            e.preventDefault();
+            document.getElementById('btnEdit').click();
+            break;
+          case 'delete':
+            e.preventDefault();
+            document.getElementById('btnDelete').click();
+            break;
+          case 'escape':
+            if (searchBox.value) { searchBox.value = ''; filterScripts(''); }
+            else if (appState.selectedAliases.size > 0) { appState.selectedAliases.clear(); updateMultiSelect(); renderScriptsList(); }
+            break;
+          case '?':
+            e.preventDefault();
+            openModal('modalHelp');
+            break;
+          case 'f5':
+            e.preventDefault();
+            fetchScripts();
+            break;
+        }
+      });
+
+      // INITIALIZATION
+      loadPipelines();
+      fetchScripts();
+      connectSSE();
+    </script>
+  </body>
+</html>
