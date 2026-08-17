@@ -105,7 +105,7 @@ type model struct {
 	viewport             viewport.Model
 	width                int
 	height               int
-	runQueue             []int
+	runQueue             []string // stores NameAlias instead of slice indices to survive reordering
 	runningIndex         int
 	activeView           string
 	formInputs           []textinput.Model
@@ -147,6 +147,21 @@ var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 // --- Professional Color Palette ---
 // Accent: Indigo (#6366f1), Emerald (#10b981), Rose (#f43f5e), Amber (#f59e0b)
 // Neutrals: Slate dark (#0f1117), border dim (#2d3748), border bright (#4a5568)
+// Form field counts - defined once to avoid magic number duplication across model.go and ui.go
+const (
+	formFieldCount      = 6 // alias, description, command, output, cron, host
+	formSubmitIdx       = 6 // submit button index
+	formCancelIdx       = 7 // cancel button index
+	formTotalFocusables = 8 // formFieldCount + submit + cancel
+
+	envBaseFieldCount = 2 // cron + notify
+	envMaxExtraPairs  = 10 // max extra key/value pairs (20 inputs)
+	envFieldCount     = envBaseFieldCount + envMaxExtraPairs*2
+	envSubmitIdx      = envFieldCount
+	envCancelIdx      = envFieldCount + 1
+	envTotalFocusables = envFieldCount + 2
+)
+
 var (
 	focusedStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).

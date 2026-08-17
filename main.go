@@ -30,7 +30,9 @@ func runHeadless(alias string) error {
 		return fmt.Errorf("script alias %q not found", alias)
 	}
 
-	cmd, taskID, err := StartTask(target.NameAlias, target.Command, target.OutputFolderPath, target.Input)
+	// Use shared buildExecCommand to handle SSH wrapping consistently with TUI path
+	command, input := buildExecCommand(*target)
+	cmd, taskID, err := StartTask(target.NameAlias, command, target.OutputFolderPath, input)
 	if err != nil {
 		return fmt.Errorf("failed to start task: %v", err)
 	}

@@ -431,10 +431,10 @@ func (m *model) renderForm() string {
 
 	saveBg := lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.Idle)).Foreground(lipgloss.Color("#475569")).Padding(0, 2).Render("Save")
 	cancelBg := lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.Idle)).Foreground(lipgloss.Color("#475569")).Padding(0, 2).Render("Cancel")
-	if m.focusedInput == 6 {
+	if m.focusedInput == formSubmitIdx {
 		saveBg = lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.Accent)).Foreground(lipgloss.Color("#ffffff")).Bold(true).Padding(0, 2).Render("Save")
 	}
-	if m.focusedInput == 7 {
+	if m.focusedInput == formCancelIdx {
 		cancelBg = lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.Fail)).Foreground(lipgloss.Color("#ffffff")).Bold(true).Padding(0, 2).Render("Cancel")
 	}
 	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render("─────────────────────────────────────────────────────"))
@@ -464,6 +464,16 @@ func (m *model) renderEnvForm() string {
 	focusedBorder := lipgloss.Color("#6366f1")
 	blurBorder := lipgloss.Color("#1e293b")
 
+	totalInputs := len(m.envInputs)
+	if totalInputs == 0 {
+		return m.renderFramedBox("Edit Script Config", "#e2e8f0", activeTheme.Accent, inner, 62)
+	}
+
+	notifyIdx := totalInputs - 1
+	submitIdx := totalInputs
+	cancelIdx := totalInputs + 1
+
+	// Cron schedule (index 0)
 	inner = append(inner, labelStyle.Render("Cron schedule  (e.g. */5 * * * *)"))
 	cronBorder := blurBorder
 	if m.focusedEnv == 0 {
@@ -477,10 +487,26 @@ func (m *model) renderEnvForm() string {
 	}
 	inner = append(inner, "")
 
-	inner = append(inner, labelStyle.Render("Environment variables  (up to 5 key=value pairs)"))
+	// Host field (index 1) - new addition
+	inner = append(inner, labelStyle.Render("SSH Host  (optional, e.g. user@host — blank = local)"))
+	hostBorder := blurBorder
+	if m.focusedEnv == 1 {
+		hostBorder = focusedBorder
+	}
+	styledHost := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(hostBorder).Width(52).Render(m.envInputs[1].View())
+	for _, l := range strings.Split(styledHost, "\n") {
+		if l != "" {
+			inner = append(inner, l)
+		}
+	}
 	inner = append(inner, "")
-	for i := 1; i < 11; i += 2 {
-		pairNum := (i / 2) + 1
+
+	// Environment variables - start from index 2, go up to notifyIdx-1
+	pairCount := (notifyIdx - 2) / 2
+	inner = append(inner, labelStyle.Render(fmt.Sprintf("Environment variables  (up to %d key=value pairs)", pairCount)))
+	inner = append(inner, "")
+	for i := 2; i < notifyIdx; i += 2 {
+		pairNum := ((i - 2) / 2) + 1
 		inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render(fmt.Sprintf("Pair %d", pairNum)))
 
 		kBorder, vBorder := blurBorder, blurBorder
@@ -503,12 +529,13 @@ func (m *model) renderEnvForm() string {
 	}
 	inner = append(inner, "")
 
+	// Desktop notification (notifyIdx)
 	inner = append(inner, labelStyle.Render("Desktop notification on complete  (y / n)"))
 	notifyBorder := blurBorder
-	if m.focusedEnv == 11 {
+	if m.focusedEnv == notifyIdx {
 		notifyBorder = focusedBorder
 	}
-	styledNotify := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(notifyBorder).Width(10).Render(m.envInputs[11].View())
+	styledNotify := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(notifyBorder).Width(10).Render(m.envInputs[notifyIdx].View())
 	for _, l := range strings.Split(styledNotify, "\n") {
 		if l != "" {
 			inner = append(inner, l)
@@ -516,12 +543,13 @@ func (m *model) renderEnvForm() string {
 	}
 	inner = append(inner, "")
 
+	// Save/Cancel buttons
 	saveBg := lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.Idle)).Foreground(lipgloss.Color("#475569")).Padding(0, 2).Render("Save")
 	cancelBg := lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.Idle)).Foreground(lipgloss.Color("#475569")).Padding(0, 2).Render("Cancel")
-	if m.focusedEnv == 12 {
+	if m.focusedEnv == submitIdx {
 		saveBg = lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.Accent)).Foreground(lipgloss.Color("#ffffff")).Bold(true).Padding(0, 2).Render("Save")
 	}
-	if m.focusedEnv == 13 {
+	if m.focusedEnv == cancelIdx {
 		cancelBg = lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.Fail)).Foreground(lipgloss.Color("#ffffff")).Bold(true).Padding(0, 2).Render("Cancel")
 	}
 	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render("─────────────────────────────────────────────────────"))

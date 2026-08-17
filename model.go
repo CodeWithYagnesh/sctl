@@ -592,12 +592,12 @@ func (m *model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.activeView = "main"
 		return m, nil
 	case "tab", "down":
-		if m.focusedInput < 7 {
-			if m.focusedInput < 6 {
+		if m.focusedInput < formCancelIdx {
+			if m.focusedInput < formFieldCount {
 				m.formInputs[m.focusedInput].Blur()
 			}
 			m.focusedInput++
-			if m.focusedInput < 6 {
+			if m.focusedInput < formFieldCount {
 				m.formInputs[m.focusedInput].Focus()
 			}
 		} else {
@@ -607,35 +607,35 @@ func (m *model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "shift+tab", "up":
 		if m.focusedInput > 0 {
-			if m.focusedInput < 6 {
+			if m.focusedInput < formFieldCount {
 				m.formInputs[m.focusedInput].Blur()
 			}
 			m.focusedInput--
-			if m.focusedInput < 6 {
+			if m.focusedInput < formFieldCount {
 				m.formInputs[m.focusedInput].Focus()
 			}
 		} else {
-			if m.focusedInput < 6 {
+			if m.focusedInput < formFieldCount {
 				m.formInputs[m.focusedInput].Blur()
 			}
-			m.focusedInput = 7
+			m.focusedInput = formCancelIdx
 		}
 		return m, nil
 	case "enter":
-		if m.focusedInput == 6 {
+		if m.focusedInput == formSubmitIdx {
 			m.submitForm()
-		} else if m.focusedInput == 7 {
+		} else if m.focusedInput == formCancelIdx {
 			m.activeView = "main"
 		} else {
 			m.formInputs[m.focusedInput].Blur()
 			m.focusedInput++
-			if m.focusedInput < 6 {
+			if m.focusedInput < formFieldCount {
 				m.formInputs[m.focusedInput].Focus()
 			}
 		}
 		return m, nil
 	}
-	if m.focusedInput < 6 {
+	if m.focusedInput < formFieldCount {
 		var cmd tea.Cmd
 		m.formInputs[m.focusedInput], cmd = m.formInputs[m.focusedInput].Update(msg)
 		return m, cmd
@@ -807,17 +807,24 @@ func (m *model) saveScriptConfigByAlias(alias string, cfg ScriptConfig) bool {
 
 func (m *model) updateEnvForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
+	totalInputs := len(m.envInputs)
+	if totalInputs == 0 {
+		return m, nil
+	}
+	submitIdx := totalInputs     // submit button
+	cancelIdx := totalInputs + 1 // cancel button
+
 	switch key {
 	case "esc":
 		m.activeView = "main"
 		return m, nil
 	case "tab", "down":
-		if m.focusedEnv < 13 {
-			if m.focusedEnv < 12 {
+		if m.focusedEnv < cancelIdx {
+			if m.focusedEnv < totalInputs {
 				m.envInputs[m.focusedEnv].Blur()
 			}
 			m.focusedEnv++
-			if m.focusedEnv < 12 {
+			if m.focusedEnv < totalInputs {
 				m.envInputs[m.focusedEnv].Focus()
 			}
 		} else {
@@ -827,35 +834,35 @@ func (m *model) updateEnvForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "shift+tab", "up":
 		if m.focusedEnv > 0 {
-			if m.focusedEnv < 12 {
+			if m.focusedEnv < totalInputs {
 				m.envInputs[m.focusedEnv].Blur()
 			}
 			m.focusedEnv--
-			if m.focusedEnv < 12 {
+			if m.focusedEnv < totalInputs {
 				m.envInputs[m.focusedEnv].Focus()
 			}
 		} else {
-			if m.focusedEnv < 12 {
+			if m.focusedEnv < totalInputs {
 				m.envInputs[m.focusedEnv].Blur()
 			}
-			m.focusedEnv = 13
+			m.focusedEnv = cancelIdx
 		}
 		return m, nil
 	case "enter":
-		if m.focusedEnv == 12 {
+		if m.focusedEnv == submitIdx {
 			m.submitEnvForm()
-		} else if m.focusedEnv == 13 {
+		} else if m.focusedEnv == cancelIdx {
 			m.activeView = "main"
 		} else {
 			m.envInputs[m.focusedEnv].Blur()
 			m.focusedEnv++
-			if m.focusedEnv < 12 {
+			if m.focusedEnv < totalInputs {
 				m.envInputs[m.focusedEnv].Focus()
 			}
 		}
 		return m, nil
 	}
-	if m.focusedEnv < 12 {
+	if m.focusedEnv < totalInputs {
 		var cmd tea.Cmd
 		m.envInputs[m.focusedEnv], cmd = m.envInputs[m.focusedEnv].Update(msg)
 		return m, cmd
@@ -888,22 +895,33 @@ func (m *model) updateDeleteConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) initEnvForm() {
-	m.envInputs = make([]textinput.Model, 12)
+	focusedScript := m.scripts[m.cursor]
+
+	// Calculate number of env input pairs needed: existing keys + space for 3 new ones
+	numPairs := len(focusedScript.Config.Input) + 3
+	// Layout: index 0 = cron, index 1 = host (NEW), then key/value pairs, last = notify
+	// Each pair needs 2 inputs (key + value), plus cron, host, notify = 3 fixed + numPairs*2
+	totalInputs := 3 + numPairs*2 // cron + host + numPairs*2 (key/value) + notify
+
+	m.envInputs = make([]textinput.Model, totalInputs)
 	for i := range m.envInputs {
 		m.envInputs[i] = textinput.New()
 		m.envInputs[i].CharLimit = 100
 		m.envInputs[i].Width = 40
 	}
 	m.envInputs[0].Placeholder = "e.g., */5 * * * *"
-	m.envInputs[11].Placeholder = "y / n"
-	m.envInputs[11].CharLimit = 1
+	m.envInputs[1].Placeholder = "e.g., user@host (optional, blank = local)"
+	// notify field is at the last index
+	notifyIdx := totalInputs - 1
+	m.envInputs[notifyIdx].Placeholder = "y / n"
+	m.envInputs[notifyIdx].CharLimit = 1
 
-	focusedScript := m.scripts[m.cursor]
 	m.envInputs[0].SetValue(focusedScript.Config.Cron)
+	m.envInputs[1].SetValue(focusedScript.Config.Host)
 	if focusedScript.Config.Notify {
-		m.envInputs[11].SetValue("y")
+		m.envInputs[notifyIdx].SetValue("y")
 	} else {
-		m.envInputs[11].SetValue("n")
+		m.envInputs[notifyIdx].SetValue("n")
 	}
 
 	keys := make([]string, 0, len(focusedScript.Config.Input))
@@ -912,18 +930,20 @@ func (m *model) initEnvForm() {
 	}
 	sort.Strings(keys)
 
-	idx := 1
+	idx := 2 // Start key/value pairs at index 2 (after cron and host)
 	for _, k := range keys {
-		if idx >= 11 {
+		if idx+1 >= totalInputs {
 			break
 		}
 		m.envInputs[idx].SetValue(k)
 		m.envInputs[idx+1].SetValue(fmt.Sprintf("%v", focusedScript.Config.Input[k]))
 		idx += 2
 	}
-	for i := 1; i < 11; i += 2 {
-		m.envInputs[i].Placeholder = fmt.Sprintf("Key %d", (i/2)+1)
-		m.envInputs[i+1].Placeholder = fmt.Sprintf("Value %d", (i/2)+1)
+	// Set placeholders for all key/value pair slots (indices 2 to notifyIdx-1)
+	for i := 2; i < notifyIdx; i += 2 {
+		pairNum := ((i - 2) / 2) + 1
+		m.envInputs[i].Placeholder = fmt.Sprintf("Key %d", pairNum)
+		m.envInputs[i+1].Placeholder = fmt.Sprintf("Value %d", pairNum)
 	}
 
 	m.envInputs[0].Focus()
@@ -931,7 +951,19 @@ func (m *model) initEnvForm() {
 
 func (m *model) submitEnvForm() {
 	focusedScript := &m.scripts[m.cursor]
-	m.updateEnvConfigByAlias(focusedScript.Config.NameAlias, strings.TrimSpace(m.envInputs[0].Value()), len(m.envInputs) > 11 && (strings.ToLower(strings.TrimSpace(m.envInputs[11].Value())) == "y" || strings.ToLower(strings.TrimSpace(m.envInputs[11].Value())) == "yes"), nil)
+	totalInputs := len(m.envInputs)
+	if totalInputs == 0 {
+		m.activeView = "main"
+		return
+	}
+	notifyIdx := totalInputs - 1
+	m.updateEnvConfigByAlias(
+		focusedScript.Config.NameAlias,
+		strings.TrimSpace(m.envInputs[0].Value()),
+		strings.ToLower(strings.TrimSpace(m.envInputs[notifyIdx].Value())) == "y" ||
+			strings.ToLower(strings.TrimSpace(m.envInputs[notifyIdx].Value())) == "yes",
+		nil,
+	)
 	m.activeView = "main"
 }
 
@@ -950,37 +982,41 @@ func (m *model) updateEnvConfigByAlias(alias string, cron string, notify bool, i
 			} else {
 				cronVal := strings.TrimSpace(cron)
 				focusedScript.Config.Cron = cronVal
-				if len(m.envInputs) > 11 {
-					notifyVal := strings.ToLower(strings.TrimSpace(m.envInputs[11].Value()))
-					focusedScript.Config.Notify = notifyVal == "y" || notifyVal == "yes"
-				} else {
-					focusedScript.Config.Notify = notify
+				// Read Host from index 1
+				if len(m.envInputs) > 1 {
+					focusedScript.Config.Host = strings.TrimSpace(m.envInputs[1].Value())
 				}
+				focusedScript.Config.Notify = notify
 
-				existingKeys := make([]string, 0, len(focusedScript.Config.Input))
-				for k := range focusedScript.Config.Input {
-					existingKeys = append(existingKeys, k)
-				}
-				sort.Strings(existingKeys)
-				shownInForm := make(map[string]bool)
-				for i, k := range existingKeys {
-					if i >= 5 {
-						break
+				// Preserve ALL existing keys that aren't shown in the form
+				totalInputs := len(m.envInputs)
+				keysInForm := make(map[string]bool)
+				// Keys start at index 2 (after cron at 0 and host at 1), go up to notifyIdx-1
+				if totalInputs >= 3 {
+					notifyIdx := totalInputs - 1
+					for kIdx := 2; kIdx < notifyIdx; kIdx += 2 {
+						k := strings.TrimSpace(m.envInputs[kIdx].Value())
+						if k != "" {
+							keysInForm[k] = true
+						}
 					}
-					shownInForm[k] = true
 				}
 
 				inputsMap := make(map[string]interface{})
 				for k, v := range focusedScript.Config.Input {
-					if !shownInForm[k] {
+					if !keysInForm[k] {
 						inputsMap[k] = v
 					}
 				}
-				for i := 1; i < 11; i += 2 {
-					k := strings.TrimSpace(m.envInputs[i].Value())
-					v := strings.TrimSpace(m.envInputs[i+1].Value())
-					if k != "" {
-						inputsMap[k] = v
+				// Add keys from form
+				if totalInputs >= 3 {
+					notifyIdx := totalInputs - 1
+					for kIdx := 2; kIdx < notifyIdx; kIdx += 2 {
+						k := strings.TrimSpace(m.envInputs[kIdx].Value())
+						v := strings.TrimSpace(m.envInputs[kIdx+1].Value())
+						if k != "" {
+							inputsMap[k] = v
+						}
 					}
 				}
 				focusedScript.Config.Input = inputsMap
@@ -1114,27 +1150,35 @@ func (m *model) updateViewport() {
 	}
 }
 
+// buildExecCommand builds the actual command to execute for a script, handling SSH wrapping if needed.
+// Returns the final command string and the input map (nil if wrapped in SSH).
+func buildExecCommand(script ScriptConfig) (string, map[string]interface{}) {
+	command := script.Command
+	input := script.Input
+
+	if script.Host != "" {
+		var envParts []string
+		for k, v := range input {
+			envParts = append(envParts, fmt.Sprintf("%s=%s", k, fmt.Sprintf("%v", v)))
+		}
+		sort.Strings(envParts)
+		envPrefix := ""
+		if len(envParts) > 0 {
+			envPrefix = strings.Join(envParts, " ") + " "
+		}
+		command = fmt.Sprintf("ssh -o BatchMode=yes -o StrictHostKeyChecking=no %s %s",
+			script.Host,
+			shellQuote(envPrefix+"bash -c "+shellQuote(command)))
+		input = nil
+	}
+
+	return command, input
+}
+
 func (m *model) runTaskCmd(idx int) tea.Cmd {
 	return func() tea.Msg {
 		script := m.scripts[idx]
-		command := script.Config.Command
-		input := script.Config.Input
-
-		if script.Config.Host != "" {
-			var envParts []string
-			for k, v := range input {
-				envParts = append(envParts, fmt.Sprintf("%s=%s", k, fmt.Sprintf("%v", v)))
-			}
-			sort.Strings(envParts)
-			envPrefix := ""
-			if len(envParts) > 0 {
-				envPrefix = strings.Join(envParts, " ") + " "
-			}
-			command = fmt.Sprintf("ssh -o BatchMode=yes -o StrictHostKeyChecking=no %s %s",
-				script.Config.Host,
-				shellQuote(envPrefix+"bash -c "+shellQuote(command)))
-			input = nil
-		}
+		command, input := buildExecCommand(script.Config)
 
 		cmd, taskID, err := StartTask(script.Config.NameAlias, command, script.Config.OutputFolderPath, input)
 		if err != nil {
@@ -1149,33 +1193,40 @@ func shellQuote(s string) string {
 }
 
 func (m *model) runSelected() tea.Cmd {
-	var indicesToRun []int
-	for i, s := range m.scripts {
+	var aliasesToRun []string
+	for _, s := range m.scripts {
 		if s.Checked {
-			indicesToRun = append(indicesToRun, i)
+			aliasesToRun = append(aliasesToRun, s.Config.NameAlias)
 		}
 	}
-	if len(indicesToRun) == 0 && len(m.scripts) > 0 {
-		indicesToRun = append(indicesToRun, m.cursor)
+	if len(aliasesToRun) == 0 && len(m.scripts) > 0 {
+		aliasesToRun = append(aliasesToRun, m.scripts[m.cursor].Config.NameAlias)
 	}
-	if len(indicesToRun) == 0 {
+	if len(aliasesToRun) == 0 {
 		return nil
 	}
 
 	if m.parallelMode {
 		var cmds []tea.Cmd
-		for _, idx := range indicesToRun {
-			m.scripts[idx].Logs = ""
-			m.scripts[idx].Progress = 0
-			m.scripts[idx].State = "Running"
-			cmds = append(cmds, m.runTaskCmd(idx))
+		for _, alias := range aliasesToRun {
+			idx := m.findScriptIndexByAlias(alias)
+			if idx >= 0 {
+				m.scripts[idx].Logs = ""
+				m.scripts[idx].Progress = 0
+				m.scripts[idx].State = "Running"
+				cmds = append(cmds, m.runTaskCmd(idx))
+			}
 		}
 		return tea.Batch(cmds...)
 	} else {
-		for _, idx := range indicesToRun {
+		for _, alias := range aliasesToRun {
+			idx := m.findScriptIndexByAlias(alias)
+			if idx < 0 {
+				continue
+			}
 			inQueue := false
 			for _, q := range m.runQueue {
-				if q == idx {
+				if q == alias {
 					inQueue = true
 					break
 				}
@@ -1184,7 +1235,7 @@ func (m *model) runSelected() tea.Cmd {
 				m.scripts[idx].Logs = ""
 				m.scripts[idx].Progress = 0
 				m.scripts[idx].State = "Idle"
-				m.runQueue = append(m.runQueue, idx)
+				m.runQueue = append(m.runQueue, alias)
 			}
 		}
 		if m.runningIndex == -1 {
@@ -1244,8 +1295,14 @@ func (m *model) runNextSequentialCmd() tea.Cmd {
 	if len(m.runQueue) == 0 {
 		return nil
 	}
-	nextIdx := m.runQueue[0]
+	nextAlias := m.runQueue[0]
 	m.runQueue = m.runQueue[1:]
+
+	nextIdx := m.findScriptIndexByAlias(nextAlias)
+	if nextIdx < 0 {
+		// Script was deleted, try next in queue
+		return m.runNextSequentialCmd()
+	}
 
 	m.runningIndex = nextIdx
 	m.scripts[nextIdx].Logs = ""

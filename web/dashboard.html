@@ -48,33 +48,13 @@
         -webkit-font-smoothing: antialiased;
       }
 
-      /* Scrollbar Styling */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: rgba(15, 23, 42, 0.6);
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #2b3954;
-        border-radius: 4px;
-        border: 1px solid var(--border);
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: var(--accent);
-      }
+      ::-webkit-scrollbar { width: 8px; height: 8px; }
+      ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); border-radius: 4px; }
+      ::-webkit-scrollbar-thumb { background: #2b3954; border-radius: 4px; border: 1px solid var(--border); }
+      ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
-      .app-shell {
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
-        width: 100vw;
-        overflow: hidden;
-      }
+      .app-shell { display: flex; flex-direction: column; height: 100vh; width: 100vw; overflow: hidden; }
 
-      /* Top Header */
       .topbar {
         height: 56px;
         background: var(--header-bg);
@@ -87,11 +67,7 @@
         z-index: 10;
       }
 
-      .brand {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
+      .brand { display: flex; align-items: center; gap: 12px; }
 
       .brand-logo {
         background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
@@ -107,18 +83,8 @@
         gap: 6px;
       }
 
-      .brand-title {
-        font-size: 1.1rem;
-        font-weight: 700;
-        color: var(--text);
-        letter-spacing: -0.3px;
-      }
-
-      .brand-tagline {
-        font-size: 0.8rem;
-        color: var(--text-dim);
-        font-weight: 400;
-      }
+      .brand-title { font-size: 1.1rem; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
+      .brand-tagline { font-size: 0.8rem; color: var(--text-dim); font-weight: 400; }
 
       .stats-strip {
         display: flex;
@@ -131,20 +97,8 @@
         font-size: 0.8rem;
       }
 
-      .stat-chip {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-weight: 500;
-        color: var(--text-muted);
-      }
-
-      .stat-dot {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-      }
-
+      .stat-chip { display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--text-muted); }
+      .stat-dot { width: 7px; height: 7px; border-radius: 50%; }
       .stat-dot.running { background: var(--success); box-shadow: 0 0 8px var(--success); animation: pulse 2s infinite; }
       .stat-dot.failed { background: var(--fail); box-shadow: 0 0 8px var(--fail); }
       .stat-dot.idle { background: var(--idle); }
@@ -155,13 +109,8 @@
         100% { transform: scale(0.95); opacity: 0.8; }
       }
 
-      .top-controls {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
+      .top-controls { display: flex; align-items: center; gap: 10px; }
 
-      /* Action Buttons */
       .btn {
         background: var(--accent);
         color: white;
@@ -180,46 +129,18 @@
         box-shadow: 0 2px 6px rgba(0,0,0,0.2);
       }
 
-      .btn:hover {
-        background: var(--accent-hover);
-        transform: translateY(-1px);
-        box-shadow: 0 4px 14px var(--accent-glow);
-      }
-
+      .btn:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 4px 14px var(--accent-glow); }
       .btn:active { transform: translateY(0); }
+      .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 
-      .btn-secondary {
-        background: var(--panel-sub);
-        color: var(--text-muted);
-        border: 1px solid var(--border);
-      }
+      .btn-secondary { background: var(--panel-sub); color: var(--text-muted); border: 1px solid var(--border); }
+      .btn-secondary:hover { background: var(--panel-card-hover); color: var(--text); border-color: #334155; box-shadow: none; }
 
-      .btn-secondary:hover {
-        background: var(--panel-card-hover);
-        color: var(--text);
-        border-color: #334155;
-        box-shadow: none;
-      }
+      .btn-danger { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
+      .btn-danger:hover { background: var(--fail); color: white; border-color: var(--fail); box-shadow: 0 4px 14px var(--fail-glow); }
 
-      .btn-danger {
-        background: rgba(239, 68, 68, 0.15);
-        color: #fca5a5;
-        border: 1px solid rgba(239, 68, 68, 0.3);
-      }
+      .btn-sm { padding: 5px 10px; font-size: 0.78rem; }
 
-      .btn-danger:hover {
-        background: var(--fail);
-        color: white;
-        border-color: var(--fail);
-        box-shadow: 0 4px 14px var(--fail-glow);
-      }
-
-      .btn-sm {
-        padding: 5px 10px;
-        font-size: 0.78rem;
-      }
-
-      /* Secondary Navigation & Tab Bar */
       .subbar {
         height: 44px;
         background: var(--panel);
@@ -230,10 +151,7 @@
         padding: 0 20px;
       }
 
-      .tabs {
-        display: flex;
-        gap: 6px;
-      }
+      .tabs { display: flex; gap: 6px; }
 
       .tab-btn {
         background: transparent;
@@ -250,16 +168,8 @@
         gap: 8px;
       }
 
-      .tab-btn:hover {
-        color: var(--text);
-        background: rgba(255, 255, 255, 0.04);
-      }
-
-      .tab-btn.active {
-        color: var(--text);
-        background: var(--panel-card);
-        border: 1px solid var(--border);
-      }
+      .tab-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.04); }
+      .tab-btn.active { color: var(--text); background: var(--panel-card); border: 1px solid var(--border); }
 
       .tab-count {
         background: rgba(99, 102, 241, 0.15);
@@ -270,38 +180,12 @@
         font-weight: 700;
       }
 
-      /* Main Content Container */
-      .main-container {
-        flex: 1;
-        min-height: 0;
-        display: flex;
-        overflow: hidden;
-        position: relative;
-      }
+      .main-container { flex: 1; min-height: 0; display: flex; overflow: hidden; position: relative; }
+      .tab-content { display: none; width: 100%; height: 100%; flex: 1; min-height: 0; }
+      .tab-content.active { display: flex; }
 
-      .tab-content {
-        display: none;
-        width: 100%;
-        height: 100%;
-        flex: 1;
-        min-height: 0;
-      }
+      .split-view { display: grid; grid-template-columns: 340px 1fr; width: 100%; height: 100%; gap: 0; min-height: 0; }
 
-      .tab-content.active {
-        display: flex;
-      }
-
-      /* Grid Split View */
-      .split-view {
-        display: grid;
-        grid-template-columns: 340px 1fr;
-        width: 100%;
-        height: 100%;
-        gap: 0;
-        min-height: 0;
-      }
-
-      /* Sidebar Left Panel */
       .sidebar {
         background: var(--panel);
         border-right: 1px solid var(--border);
@@ -313,12 +197,7 @@
         overflow: hidden;
       }
 
-      .sidebar-top {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        margin-bottom: 12px;
-      }
+      .sidebar-top { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
 
       .sidebar-title {
         font-size: 0.8rem;
@@ -343,13 +222,8 @@
         transition: all 0.15s ease;
       }
 
-      .search-box:focus {
-        outline: none;
-        border-color: var(--accent);
-        box-shadow: 0 0 0 3px var(--accent-glow);
-      }
+      .search-box:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
 
-      /* Script Cards Scrollable List */
       .list {
         flex: 1;
         min-height: 0;
@@ -360,56 +234,26 @@
         gap: 10px;
       }
 
+      .empty-msg { padding: 24px; text-align: center; color: var(--text-dim); font-size: 0.85rem; }
+
       .script-card {
         background: var(--panel-card);
         border: 1px solid var(--border);
         border-radius: 10px;
         padding: 12px;
         cursor: pointer;
-        transition: all 0.15s ease;
+        transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
         position: relative;
       }
 
-      .script-card:hover {
-        background: var(--panel-card-hover);
-        border-color: #334155;
-        transform: translateY(-1px);
-      }
+      .script-card:hover { background: var(--panel-card-hover); border-color: #334155; transform: translateY(-1px); }
+      .script-card.selected { background: var(--panel-card-active); border-color: var(--accent); box-shadow: 0 0 16px rgba(99, 102, 241, 0.15); }
+      .script-card.multi-selected { border-color: var(--accent); background: rgba(99, 102, 241, 0.12); }
 
-      .script-card.selected {
-        background: var(--panel-card-active);
-        border-color: var(--accent);
-        box-shadow: 0 0 16px rgba(99, 102, 241, 0.15);
-      }
+      .script-card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+      .script-card-title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.92rem; color: var(--text); }
 
-      .script-card.multi-selected {
-        border-color: var(--accent);
-        background: rgba(99, 102, 241, 0.12);
-      }
-
-      .script-card-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        margin-bottom: 6px;
-      }
-
-      .script-card-title {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-weight: 600;
-        font-size: 0.92rem;
-        color: var(--text);
-      }
-
-      .checkbox {
-        width: 16px;
-        height: 16px;
-        accent-color: var(--accent);
-        cursor: pointer;
-      }
+      .checkbox { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 
       .badge {
         display: inline-flex;
@@ -449,9 +293,10 @@
 
       .progress-bar-fill {
         height: 100%;
+        width: 0%;
         background: linear-gradient(90deg, #6366f1 0%, #10b981 100%);
         border-radius: 999px;
-        transition: width 0.3s ease;
+        transition: width 0.4s ease;
       }
 
       .ssh-chip {
@@ -464,16 +309,7 @@
         border: 1px solid rgba(125, 211, 252, 0.3);
       }
 
-      /* Main Right Detail Panel */
-      .main-panel {
-        background: var(--bg);
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        min-height: 0;
-        overflow: hidden;
-        padding: 20px;
-      }
+      .main-panel { background: var(--bg); display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; padding: 20px; }
 
       .details-header {
         background: var(--panel);
@@ -486,51 +322,15 @@
         gap: 12px;
       }
 
-      .details-title-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
+      .details-title-row { display: flex; align-items: center; justify-content: space-between; }
+      .details-title { font-size: 1.25rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 10px; }
 
-      .details-title {
-        font-size: 1.25rem;
-        font-weight: 700;
-        margin: 0;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
+      .details-meta { display: flex; align-items: center; gap: 16px; font-size: 0.83rem; color: var(--text-muted); font-family: var(--font-mono); flex-wrap: wrap; }
+      .meta-item { display: flex; align-items: center; gap: 6px; }
 
-      .details-meta {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        font-size: 0.83rem;
-        color: var(--text-muted);
-        font-family: var(--font-mono);
-      }
+      .action-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .action-divider { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
 
-      .meta-item {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-
-      .action-toolbar {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        align-items: center;
-      }
-
-      .action-divider {
-        width: 1px;
-        height: 24px;
-        background: var(--border);
-        margin: 0 4px;
-      }
-
-      /* Terminal Log Output Window */
       .console-window {
         flex: 1;
         min-height: 0;
@@ -556,20 +356,8 @@
         color: var(--text-dim);
       }
 
-      .console-title {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-weight: 600;
-        color: var(--text-muted);
-      }
-
-      .console-dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        display: inline-block;
-      }
+      .console-title { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text-muted); }
+      .console-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
       .logs-content {
         flex: 1;
@@ -582,6 +370,7 @@
         color: #cbd5e1;
         white-space: pre-wrap;
         word-break: break-word;
+        margin: 0;
       }
 
       .no-selection {
@@ -595,34 +384,11 @@
         text-align: center;
       }
 
-      .no-selection-icon {
-        font-size: 2.5rem;
-        opacity: 0.5;
-      }
+      .no-selection-icon { font-size: 2.5rem; opacity: 0.5; }
 
-      /* Pipeline View Layout */
-      .pipelines-view {
-        width: 100%;
-        height: 100%;
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-        padding: 20px;
-        overflow-y: auto;
-      }
-
-      .pipelines-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 20px;
-      }
-
-      .pipeline-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-        gap: 16px;
-      }
+      .pipelines-view { width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; padding: 20px; overflow-y: auto; }
+      .pipelines-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+      .pipeline-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
 
       .pipeline-card {
         background: var(--panel);
@@ -641,29 +407,14 @@
       .pipeline-card::before {
         content: '';
         position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
+        top: 0; left: 0; right: 0;
         height: 3px;
         background: linear-gradient(90deg, #6366f1 0%, #10b981 100%);
       }
 
-      .pipeline-card:hover {
-        border-color: var(--accent);
-        transform: translateY(-2px);
-        box-shadow: var(--shadow-lg);
-      }
-
-      .pipeline-card-title {
-        font-size: 1.1rem;
-        font-weight: 700;
-        margin: 0;
-      }
-
-      .pipeline-card-desc {
-        font-size: 0.84rem;
-        color: var(--text-muted);
-      }
+      .pipeline-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+      .pipeline-card-title { font-size: 1.1rem; font-weight: 700; margin: 0; }
+      .pipeline-card-desc { font-size: 0.84rem; color: var(--text-muted); }
 
       .pipeline-steps-preview {
         display: flex;
@@ -677,23 +428,12 @@
         font-size: 0.8rem;
       }
 
-      .pipeline-step-chip {
-        background: var(--panel-card);
-        padding: 3px 8px;
-        border-radius: 4px;
-        color: var(--text-muted);
-        font-family: var(--font-mono);
-        font-size: 0.75rem;
-      }
+      .pipeline-step-chip { background: var(--panel-card); padding: 3px 8px; border-radius: 4px; color: var(--text-muted); font-family: var(--font-mono); font-size: 0.75rem; }
 
-      /* Modals */
       .modal-backdrop {
         display: none;
         position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
+        top: 0; left: 0; right: 0; bottom: 0;
         background: rgba(5, 8, 16, 0.8);
         backdrop-filter: blur(8px);
         z-index: 100;
@@ -702,9 +442,7 @@
         animation: fadeIn 0.15s ease;
       }
 
-      .modal-backdrop.open {
-        display: flex;
-      }
+      .modal-backdrop.open { display: flex; }
 
       .modal-dialog {
         background: var(--panel);
@@ -720,48 +458,17 @@
         overflow: hidden;
       }
 
-      .modal-dialog.lg {
-        max-width: 900px;
-      }
+      .modal-dialog.lg { max-width: 900px; }
 
       @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
       @keyframes scaleUp { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-      .modal-header {
-        padding: 20px 24px;
-        border-bottom: 1px solid var(--border);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-
-      .modal-title {
-        font-size: 1.2rem;
-        font-weight: 700;
-        margin: 0;
-      }
-
-      .modal-close {
-        background: transparent;
-        border: none;
-        color: var(--text-dim);
-        font-size: 1.4rem;
-        cursor: pointer;
-        line-height: 1;
-        padding: 4px;
-        border-radius: 4px;
-      }
-
+      .modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+      .modal-title { font-size: 1.2rem; font-weight: 700; margin: 0; }
+      .modal-close { background: transparent; border: none; color: var(--text-dim); font-size: 1.4rem; cursor: pointer; line-height: 1; padding: 4px; border-radius: 4px; }
       .modal-close:hover { color: var(--text); background: rgba(255,255,255,0.05); }
 
-      .modal-body {
-        padding: 24px;
-        overflow-y: auto;
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
+      .modal-body { padding: 24px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 16px; }
 
       .modal-footer {
         padding: 16px 24px;
@@ -772,18 +479,8 @@
         gap: 10px;
       }
 
-      /* Form Controls */
-      .form-group {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-
-      .form-label {
-        font-size: 0.82rem;
-        font-weight: 600;
-        color: var(--text-muted);
-      }
+      .form-group { display: flex; flex-direction: column; gap: 6px; }
+      .form-label { font-size: 0.82rem; font-weight: 600; color: var(--text-muted); }
 
       .form-input, .form-select, .form-textarea {
         background: var(--panel-sub);
@@ -796,19 +493,12 @@
         transition: all 0.15s ease;
       }
 
-      .form-input:focus, .form-select:focus, .form-textarea:focus {
-        outline: none;
-        border-color: var(--accent);
-        box-shadow: 0 0 0 3px var(--accent-glow);
-      }
+      .form-input:focus, .form-select:focus, .form-textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+      .form-input.invalid { border-color: var(--fail); box-shadow: 0 0 0 3px var(--fail-glow); }
+      .form-error { font-size: 0.78rem; color: #fca5a5; min-height: 1em; }
 
-      .form-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 14px;
-      }
+      .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 
-      /* Pipeline Graph Canvas */
       .pipeline-graph-container {
         width: 100%;
         background: #080d1a;
@@ -821,13 +511,8 @@
         position: relative;
       }
 
-      canvas#pipelineCanvas {
-        width: 100%;
-        height: 220px;
-        display: block;
-      }
+      canvas#pipelineCanvas { width: 100%; height: 220px; display: block; }
 
-      /* Bottom Keyboard Shortcut Footer Border */
       .footer-shortcut-bar {
         height: 36px;
         background: #0a0f1d;
@@ -843,19 +528,8 @@
         z-index: 10;
       }
 
-      .shortcut-items {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        overflow-x: auto;
-      }
-
-      .shortcut-item {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        white-space: nowrap;
-      }
+      .shortcut-items { display: flex; align-items: center; gap: 14px; overflow-x: auto; }
+      .shortcut-item { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
 
       .kkey {
         background: #1e293b;
@@ -867,22 +541,11 @@
         font-size: 0.72rem;
       }
 
-      .connection-status {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        color: var(--text-muted);
-      }
+      .connection-status { display: flex; align-items: center; gap: 6px; color: var(--text-muted); }
+      .live-pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--success); box-shadow: 0 0 6px var(--success); }
+      .live-pulse.down { background: var(--fail); box-shadow: 0 0 6px var(--fail); animation: none; }
+      .live-pulse.reconnecting { background: var(--stopped); box-shadow: 0 0 6px var(--stopped); animation: pulse 1s infinite; }
 
-      .live-pulse {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: var(--success);
-        box-shadow: 0 0 6px var(--success);
-      }
-
-      /* Multi select bar */
       .multi-select-bar {
         background: rgba(99, 102, 241, 0.15);
         border-bottom: 1px solid var(--accent);
@@ -893,6 +556,31 @@
         font-size: 0.85rem;
       }
       .multi-select-bar.hidden { display: none; }
+
+      .toast-stack {
+        position: fixed;
+        bottom: 48px;
+        right: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        z-index: 200;
+      }
+
+      .toast {
+        background: var(--panel-card);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--accent);
+        border-radius: 8px;
+        padding: 10px 14px;
+        font-size: 0.85rem;
+        box-shadow: var(--shadow-lg);
+        animation: toastIn 0.2s ease;
+        max-width: 320px;
+      }
+      .toast.error { border-left-color: var(--fail); }
+      .toast.success { border-left-color: var(--success); }
+      @keyframes toastIn { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     </style>
   </head>
   <body>
@@ -1052,11 +740,13 @@
           <div class="shortcut-item"><span class="kkey">?</span> Help</div>
         </div>
         <div class="connection-status">
-          <span class="live-pulse"></span>
-          <span id="sseStatus">Live SSE Connected</span>
+          <span class="live-pulse" id="livePulse"></span>
+          <span id="sseStatus">Connecting...</span>
         </div>
       </footer>
     </div>
+
+    <div class="toast-stack" id="toastStack"></div>
 
     <!-- MODALS -->
 
@@ -1088,11 +778,12 @@
           <h3 class="modal-title" id="modalScriptTitle">Add New Script</h3>
           <button type="button" class="modal-close" data-close="modalScript">&times;</button>
         </div>
-        <form id="formScript">
+        <form id="formScript" novalidate>
           <div class="modal-body">
             <div class="form-group">
               <label class="form-label">Script Alias (Unique Name)</label>
               <input type="text" id="scriptAlias" class="form-input" placeholder="e.g. system_backup" required />
+              <div class="form-error" id="errAlias"></div>
             </div>
             <div class="form-group">
               <label class="form-label">Description</label>
@@ -1101,10 +792,12 @@
             <div class="form-group">
               <label class="form-label">Shell Command</label>
               <input type="text" id="scriptCmd" class="form-input" placeholder="e.g. ./backup.sh --all" required />
+              <div class="form-error" id="errCmd"></div>
             </div>
             <div class="form-group">
               <label class="form-label">Output Folder Path</label>
               <input type="text" id="scriptOutputFolder" class="form-input" placeholder="e.g. ./output/backup" required />
+              <div class="form-error" id="errFolder"></div>
             </div>
             <div class="form-row">
               <div class="form-group">
@@ -1116,10 +809,11 @@
                 <input type="text" id="scriptHost" class="form-input" placeholder="e.g. user@192.168.1.50" />
               </div>
             </div>
+            <div class="form-error" id="errFormGeneral"></div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-close="modalScript">Cancel</button>
-            <button type="submit" class="btn">💾 Save Script</button>
+            <button type="submit" class="btn" id="btnSaveScript">💾 Save Script</button>
           </div>
         </form>
       </div>
@@ -1132,7 +826,7 @@
           <h3 class="modal-title" id="modalPipelineTitle">Create Script Pipeline</h3>
           <button type="button" class="modal-close" data-close="modalPipeline">&times;</button>
         </div>
-        <form id="formPipeline">
+        <form id="formPipeline" novalidate>
           <div class="modal-body">
             <div class="form-row">
               <div class="form-group">
@@ -1159,6 +853,7 @@
                 </div>
               </div>
             </div>
+            <div class="form-error" id="errPipelineGeneral"></div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-close="modalPipeline">Cancel</button>
@@ -1214,7 +909,7 @@
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label class="form-label">Auto Refresh Frequency</label>
+            <label class="form-label">Auto Refresh Frequency (polling fallback, used alongside live stream)</label>
             <select class="form-select" id="settingAutoRefresh">
               <option value="0">Disabled</option>
               <option value="5">Every 5 Seconds</option>
@@ -1285,7 +980,7 @@
       const appState = {
         scripts: [],
         filteredScripts: [],
-        selectedIdx: 0,
+        selectedAlias: null,
         selectedAliases: new Set(),
         searchTerm: '',
         pipelines: [],
@@ -1293,8 +988,36 @@
         currentPipelineSteps: [],
         activePipelineId: null,
         settings: { autoRefresh: 10 },
-        eventSource: null
+        eventSource: null,
+        sseReconnectAttempts: 0,
+        sseReconnectTimer: null,
+        pollTimer: null,
+        pipelineRunTokens: {} // pipelineId -> token, used to cancel stale runs
       };
+
+      // ---------- Utilities ----------
+      function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function showToast(message, type = 'info') {
+        const stack = document.getElementById('toastStack');
+        const el = document.createElement('div');
+        el.className = `toast ${type}`;
+        el.textContent = message;
+        stack.appendChild(el);
+        setTimeout(() => {
+          el.style.opacity = '0';
+          el.style.transition = 'opacity 0.2s ease';
+          setTimeout(() => el.remove(), 220);
+        }, 3200);
+      }
 
       // Elements
       const searchBox = document.getElementById('searchBox');
@@ -1303,6 +1026,8 @@
       const scriptDetailPanel = document.getElementById('scriptDetailPanel');
       const logsOutput = document.getElementById('logsOutput');
       const multiSelectBar = document.getElementById('multiSelectBar');
+      const livePulse = document.getElementById('livePulse');
+      const sseStatusEl = document.getElementById('sseStatus');
 
       // Clock
       function updateClock() {
@@ -1332,6 +1057,9 @@
         const m = document.getElementById(id);
         if (m) m.classList.remove('open');
       }
+      function closeAllModals() {
+        document.querySelectorAll('.modal-backdrop.open').forEach(m => m.classList.remove('open'));
+      }
       document.querySelectorAll('[data-close]').forEach(el => {
         el.onclick = () => closeModal(el.dataset.close);
       });
@@ -1339,7 +1067,7 @@
         m.onclick = (e) => { if (e.target === m) closeModal(m.id); };
       });
 
-      // Filter Scripts
+      // ---------- Filtering ----------
       function filterScripts(term) {
         appState.searchTerm = term.toLowerCase();
         if (!term) {
@@ -1351,15 +1079,20 @@
             (s.command && s.command.toLowerCase().includes(appState.searchTerm))
           );
         }
-        if (appState.selectedIdx >= appState.filteredScripts.length) {
-          appState.selectedIdx = Math.max(0, appState.filteredScripts.length - 1);
+
+        // Preserve selection by alias if it still exists in the filtered set,
+        // otherwise fall back to the first item (do NOT reset while user is mid-filter unnecessarily).
+        const stillPresent = appState.filteredScripts.some(s => s.alias === appState.selectedAlias);
+        if (!stillPresent) {
+          appState.selectedAlias = appState.filteredScripts.length > 0 ? appState.filteredScripts[0].alias : null;
         }
+
         renderScriptsList();
       }
 
       searchBox.oninput = (e) => filterScripts(e.target.value);
 
-      // Render Scripts List
+      // ---------- Diff-based list rendering ----------
       function renderScriptsList() {
         const list = appState.filteredScripts;
         document.getElementById('countScripts').textContent = appState.scripts.length;
@@ -1376,50 +1109,59 @@
         document.getElementById('statFailed').textContent = `${failedCount} failed`;
 
         if (list.length === 0) {
-          scriptsList.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--text-dim); font-size: 0.85rem;">No matching scripts found</div>`;
+          scriptsList.innerHTML = `<div class="empty-msg">No matching scripts found</div>`;
           noSelection.style.display = 'flex';
           scriptDetailPanel.style.display = 'none';
           return;
         }
 
-        scriptsList.innerHTML = list.map((script, idx) => {
-          const isSel = idx === appState.selectedIdx;
+        // Build a map of existing cards by alias so we can update in place instead of
+        // destroying/recreating the whole list on every SSE tick (fixes progress bar
+        // not animating / focus loss on rapid updates).
+        const existingCards = new Map();
+        scriptsList.querySelectorAll('.script-card').forEach(card => {
+          existingCards.set(card.dataset.alias, card);
+        });
+
+        const seenAliases = new Set();
+        let prevNode = null;
+
+        list.forEach((script) => {
+          seenAliases.add(script.alias);
+          let card = existingCards.get(script.alias);
+          const isSel = script.alias === appState.selectedAlias;
           const isChecked = appState.selectedAliases.has(script.alias);
           const stateClass = (script.state || 'idle').toLowerCase();
-          return `
-            <div class="script-card ${isSel ? 'selected' : ''} ${isChecked ? 'multi-selected' : ''}" data-idx="${idx}" data-alias="${script.alias}">
+
+          if (!card) {
+            card = document.createElement('div');
+            card.className = 'script-card';
+            card.dataset.alias = script.alias;
+            card.innerHTML = `
               <div class="script-card-header">
                 <div class="script-card-title">
-                  <input type="checkbox" class="checkbox" ${isChecked ? 'checked' : ''} data-alias="${script.alias}" onclick="event.stopPropagation();" />
-                  <span>${script.alias}</span>
+                  <input type="checkbox" class="checkbox" data-alias="${escapeHtml(script.alias)}" onclick="event.stopPropagation();" />
+                  <span class="cardAliasText"></span>
                 </div>
-                <span class="badge badge-${stateClass}">${script.state || 'IDLE'}</span>
+                <span class="badge cardBadge"></span>
               </div>
-              ${script.description ? `<div class="script-card-desc">${script.description}</div>` : ''}
+              <div class="script-card-desc" style="display:none;"></div>
               <div class="progress-bar-wrap">
-                <div class="progress-bar-fill" style="width: ${script.progress || 0}%;"></div>
+                <div class="progress-bar-fill" style="width: 0%;"></div>
               </div>
-            </div>
-          `;
-        }).join('');
-
-        // Event listeners for cards
-        scriptsList.querySelectorAll('.script-card').forEach(card => {
-          card.onclick = (e) => {
-            const idx = parseInt(card.dataset.idx);
-            if (e.ctrlKey || e.metaKey) {
-              const alias = card.dataset.alias;
-              if (appState.selectedAliases.has(alias)) appState.selectedAliases.delete(alias);
-              else appState.selectedAliases.add(alias);
-            } else {
-              appState.selectedIdx = idx;
-            }
-            updateMultiSelect();
-            renderScriptsList();
-          };
-
-          const cb = card.querySelector('.checkbox');
-          if (cb) {
+            `;
+            card.onclick = (e) => {
+              if (e.ctrlKey || e.metaKey) {
+                const alias = card.dataset.alias;
+                if (appState.selectedAliases.has(alias)) appState.selectedAliases.delete(alias);
+                else appState.selectedAliases.add(alias);
+              } else {
+                appState.selectedAlias = card.dataset.alias;
+              }
+              updateMultiSelect();
+              renderScriptsList();
+            };
+            const cb = card.querySelector('.checkbox');
             cb.onchange = (e) => {
               const alias = e.target.dataset.alias;
               if (e.target.checked) appState.selectedAliases.add(alias);
@@ -1427,7 +1169,49 @@
               updateMultiSelect();
               renderScriptsList();
             };
+            scriptsList.appendChild(card);
           }
+
+          // Reorder if needed (keep DOM order matching list order)
+          if (prevNode ? prevNode.nextSibling !== card : scriptsList.firstChild !== card) {
+            if (prevNode) prevNode.after(card);
+            else scriptsList.prepend(card);
+          }
+          prevNode = card;
+
+          // Update classes
+          card.classList.toggle('selected', isSel);
+          card.classList.toggle('multi-selected', isChecked);
+
+          // Update fields in place (this is what makes the progress bar animate smoothly)
+          const cb = card.querySelector('.checkbox');
+          if (cb.checked !== isChecked) cb.checked = isChecked;
+
+          const aliasText = card.querySelector('.cardAliasText');
+          if (aliasText.textContent !== script.alias) aliasText.textContent = script.alias;
+
+          const badge = card.querySelector('.cardBadge');
+          const newBadgeClass = `badge badge-${stateClass}`;
+          if (badge.className !== newBadgeClass) badge.className = newBadgeClass;
+          const badgeText = (script.state || 'IDLE').toUpperCase();
+          if (badge.textContent !== badgeText) badge.textContent = badgeText;
+
+          const descEl = card.querySelector('.script-card-desc');
+          if (script.description) {
+            descEl.style.display = '';
+            if (descEl.textContent !== script.description) descEl.textContent = script.description;
+          } else {
+            descEl.style.display = 'none';
+          }
+
+          const fill = card.querySelector('.progress-bar-fill');
+          const pct = `${script.progress || 0}%`;
+          if (fill.style.width !== pct) fill.style.width = pct;
+        });
+
+        // Remove cards for scripts no longer in the filtered list
+        existingCards.forEach((card, alias) => {
+          if (!seenAliases.has(alias)) card.remove();
         });
 
         renderScriptDetail();
@@ -1448,12 +1232,10 @@
         renderScriptsList();
       };
 
-      // Get Current Selected Script
       function getSelectedScript() {
-        return appState.filteredScripts[appState.selectedIdx] || null;
+        return appState.filteredScripts.find(s => s.alias === appState.selectedAlias) || null;
       }
 
-      // Render Script Detail
       function renderScriptDetail() {
         const script = getSelectedScript();
         if (!script) {
@@ -1484,85 +1266,196 @@
         else if (script.state === 'Failed') dot.style.background = 'var(--fail)';
         else dot.style.background = 'var(--idle)';
 
-        logsOutput.textContent = script.logs || 'No output logs yet.';
-        logsOutput.scrollTop = logsOutput.scrollHeight;
-      }
-
-      // Auto Scroll card into view
-      function scrollToSelectedCard() {
-        const selCard = scriptsList.querySelector('.script-card.selected');
-        if (selCard) {
-          selCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        const newLogs = script.logs || 'No output logs yet.';
+        if (logsOutput.textContent !== newLogs) {
+          const wasAtBottom = logsOutput.scrollTop + logsOutput.clientHeight >= logsOutput.scrollHeight - 20;
+          logsOutput.textContent = newLogs;
+          if (wasAtBottom) logsOutput.scrollTop = logsOutput.scrollHeight;
         }
       }
 
-      // API Actions
+      function scrollToSelectedCard() {
+        const selCard = scriptsList.querySelector('.script-card.selected');
+        if (selCard) selCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+
+      // ---------- API Actions ----------
       async function fetchScripts() {
         try {
           const res = await fetch('/api/scripts');
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
           appState.scripts = data.scripts || [];
           filterScripts(appState.searchTerm);
         } catch (err) {
           console.error('Fetch error:', err);
+          showToast('Failed to load scripts from server.', 'error');
         }
       }
 
+      // SSE with auto-reconnect (fixes "must hard reload to see updates" bug)
       function connectSSE() {
-        if (appState.eventSource) appState.eventSource.close();
-        appState.eventSource = new EventSource('/api/stream');
-        appState.eventSource.onmessage = (e) => {
+        if (appState.sseReconnectTimer) {
+          clearTimeout(appState.sseReconnectTimer);
+          appState.sseReconnectTimer = null;
+        }
+        if (appState.eventSource) {
+          appState.eventSource.close();
+          appState.eventSource = null;
+        }
+
+        setConnectionStatus('reconnecting', 'Connecting...');
+
+        let es;
+        try {
+          es = new EventSource('/api/stream');
+        } catch (err) {
+          scheduleSseReconnect();
+          return;
+        }
+        appState.eventSource = es;
+
+        es.onopen = () => {
+          appState.sseReconnectAttempts = 0;
+          setConnectionStatus('up', 'Live SSE Stream Connected');
+        };
+
+        es.onmessage = (e) => {
           try {
             const data = JSON.parse(e.data);
             appState.scripts = data.scripts || [];
             filterScripts(appState.searchTerm);
-            document.getElementById('sseStatus').textContent = 'Live SSE Stream Connected';
+            setConnectionStatus('up', 'Live SSE Stream Connected');
           } catch (err) {
-            console.error(err);
+            console.error('SSE parse error:', err);
           }
         };
-        appState.eventSource.onerror = () => {
-          document.getElementById('sseStatus').textContent = 'SSE Reconnecting...';
+
+        es.onerror = () => {
+          setConnectionStatus('down', 'Connection lost — reconnecting...');
+          es.close();
+          appState.eventSource = null;
+          scheduleSseReconnect();
         };
       }
 
+      function scheduleSseReconnect() {
+        appState.sseReconnectAttempts += 1;
+        // Exponential backoff, capped at 15s
+        const delay = Math.min(15000, 1000 * Math.pow(1.6, appState.sseReconnectAttempts));
+        appState.sseReconnectTimer = setTimeout(() => {
+          connectSSE();
+        }, delay);
+      }
+
+      function setConnectionStatus(state, text) {
+        sseStatusEl.textContent = text;
+        livePulse.classList.remove('down', 'reconnecting');
+        if (state === 'down') livePulse.classList.add('down');
+        else if (state === 'reconnecting') livePulse.classList.add('reconnecting');
+      }
+
+      // Polling fallback, controlled by Settings > Auto Refresh Frequency.
+      // Acts as a safety net in case SSE is unavailable behind a proxy that
+      // buffers/kills long-lived connections.
+      function applyPollingSetting(seconds) {
+        if (appState.pollTimer) {
+          clearInterval(appState.pollTimer);
+          appState.pollTimer = null;
+        }
+        const n = parseInt(seconds, 10) || 0;
+        appState.settings.autoRefresh = n;
+        if (n > 0) {
+          appState.pollTimer = setInterval(() => {
+            // Only poll as a fallback if SSE isn't currently connected,
+            // to avoid redundant traffic when the live stream is healthy.
+            if (!appState.eventSource || appState.eventSource.readyState !== 1) {
+              fetchScripts();
+            }
+          }, n * 1000);
+        }
+      }
+
       async function runScript(alias) {
-        await fetch(`/api/scripts/${encodeURIComponent(alias)}/run`, { method: 'POST' });
+        try {
+          const res = await fetch(`/api/scripts/${encodeURIComponent(alias)}/run`, { method: 'POST' });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } catch (err) {
+          showToast(`Failed to start "${alias}".`, 'error');
+          throw err;
+        }
         setTimeout(fetchScripts, 100);
       }
 
       async function stopScript(alias) {
-        await fetch(`/api/scripts/${encodeURIComponent(alias)}/stop`, { method: 'POST' });
+        try {
+          const res = await fetch(`/api/scripts/${encodeURIComponent(alias)}/stop`, { method: 'POST' });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } catch (err) {
+          showToast(`Failed to stop "${alias}".`, 'error');
+        }
         setTimeout(fetchScripts, 100);
       }
 
       async function deleteScript(alias) {
         if (!confirm(`Are you sure you want to delete "${alias}"?`)) return;
-        await fetch(`/api/scripts/${encodeURIComponent(alias)}`, { method: 'DELETE' });
-        appState.selectedIdx = 0;
-        await fetchScripts();
+        try {
+          const res = await fetch(`/api/scripts/${encodeURIComponent(alias)}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          appState.selectedAliases.delete(alias);
+          if (appState.selectedAlias === alias) appState.selectedAlias = null;
+          await fetchScripts();
+          showToast(`Deleted "${alias}".`, 'success');
+        } catch (err) {
+          showToast(`Failed to delete "${alias}".`, 'error');
+        }
       }
 
       document.getElementById('btnRun').onclick = () => { const s = getSelectedScript(); if (s) runScript(s.alias); };
-      document.getElementById('btnStop').onclick = () => { const s = getSelectedScript(); if (s) stopScript(s.alias); };
+      document.getElementById('btnStop').onclick = () => {
+        const s = getSelectedScript();
+        if (s) stopScript(s.alias);
+        else showToast('No script selected.', 'error');
+      };
       document.getElementById('btnDelete').onclick = () => { const s = getSelectedScript(); if (s) deleteScript(s.alias); };
       document.getElementById('btnBatchRun').onclick = async () => {
         if (appState.selectedAliases.size === 0) return;
         const aliases = Array.from(appState.selectedAliases);
-        await fetch('/api/run-batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ aliases })
-        });
+        try {
+          const res = await fetch('/api/run-batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ aliases })
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          showToast(`Started ${aliases.length} script(s).`, 'success');
+        } catch (err) {
+          showToast('Failed to run batch.', 'error');
+        }
         appState.selectedAliases.clear();
         updateMultiSelect();
         setTimeout(fetchScripts, 100);
       };
 
-      document.getElementById('btnClearLogs').onclick = () => { logsOutput.textContent = 'Logs cleared.'; };
+      // "Clear" now persists to the backend so it doesn't get overwritten
+      // on the very next SSE tick / poll (previously local-only).
+      document.getElementById('btnClearLogs').onclick = async () => {
+        const s = getSelectedScript();
+        if (!s) return;
+        logsOutput.textContent = 'Logs cleared.';
+        try {
+          const res = await fetch(`/api/scripts/${encodeURIComponent(s.alias)}/logs`, { method: 'DELETE' });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } catch (err) {
+          // Backend may not support this endpoint yet; let the user know it's a local-only clear.
+          showToast('Cleared locally only — server does not support clearing logs yet.', 'error');
+        }
+      };
+
       document.getElementById('btnCopyLogs').onclick = () => {
-        navigator.clipboard.writeText(logsOutput.textContent);
-        alert('Logs copied to clipboard!');
+        navigator.clipboard.writeText(logsOutput.textContent)
+          .then(() => showToast('Logs copied to clipboard.', 'success'))
+          .catch(() => showToast('Could not copy logs.', 'error'));
       };
 
       document.getElementById('btnReport').onclick = () => {
@@ -1572,7 +1465,7 @@
 
       document.getElementById('btnHistory').onclick = async () => {
         const s = getSelectedScript();
-        if (!s) return;
+        if (!s) { showToast('No script selected.', 'error'); return; }
         document.getElementById('historyModalTitle').textContent = `Execution History — ${s.alias}`;
         document.getElementById('historyModalSub').textContent = `Past task runs for ${s.alias}`;
         const container = document.getElementById('historyListContainer');
@@ -1591,12 +1484,12 @@
           container.innerHTML = history.map(item => `
             <div style="background: var(--panel-card); padding: 12px; border-radius: 8px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
               <div>
-                <strong style="color: var(--text); font-size: 0.9rem;">Task #${item.TaskID}</strong>
+                <strong style="color: var(--text); font-size: 0.9rem;">Task #${escapeHtml(item.TaskID)}</strong>
                 <div style="font-size: 0.78rem; color: var(--text-muted); font-family: var(--font-mono); margin-top: 2px;">
-                  ${item.Timestamp ? new Date(item.Timestamp).toLocaleString() : 'N/A'}
+                  ${item.Timestamp ? escapeHtml(new Date(item.Timestamp).toLocaleString()) : 'N/A'}
                 </div>
               </div>
-              <span class="badge badge-${(item.State || 'idle').toLowerCase()}">${(item.State || 'UNKNOWN').toUpperCase()}</span>
+              <span class="badge badge-${escapeHtml((item.State || 'idle').toLowerCase())}">${escapeHtml((item.State || 'UNKNOWN').toUpperCase())}</span>
             </div>
           `).join('');
         } catch (err) {
@@ -1604,9 +1497,19 @@
         }
       };
 
-      // Add / Edit Script Form
+      // ---------- Add / Edit Script Form ----------
+      function clearFormErrors() {
+        ['errAlias', 'errCmd', 'errFolder', 'errFormGeneral'].forEach(id => {
+          document.getElementById(id).textContent = '';
+        });
+        ['scriptAlias', 'scriptCmd', 'scriptOutputFolder'].forEach(id => {
+          document.getElementById(id).classList.remove('invalid');
+        });
+      }
+
       document.getElementById('btnNewScript').onclick = () => {
         appState.editingScriptAlias = null;
+        clearFormErrors();
         document.getElementById('modalScriptTitle').textContent = 'Add New Script';
         document.getElementById('scriptAlias').value = '';
         document.getElementById('scriptAlias').readOnly = false;
@@ -1620,8 +1523,9 @@
 
       document.getElementById('btnEdit').onclick = () => {
         const s = getSelectedScript();
-        if (!s) return;
+        if (!s) { showToast('No script selected.', 'error'); return; }
         appState.editingScriptAlias = s.alias;
+        clearFormErrors();
         document.getElementById('modalScriptTitle').textContent = `Edit Script — ${s.alias}`;
         document.getElementById('scriptAlias').value = s.alias;
         document.getElementById('scriptAlias').readOnly = true;
@@ -1635,33 +1539,82 @@
 
       document.getElementById('formScript').onsubmit = async (e) => {
         e.preventDefault();
+        clearFormErrors();
+
+        const alias = document.getElementById('scriptAlias').value.trim();
+        const cmd = document.getElementById('scriptCmd').value.trim();
+        const folder = document.getElementById('scriptOutputFolder').value.trim();
+
+        let hasError = false;
+        if (!alias) {
+          document.getElementById('errAlias').textContent = 'Alias is required.';
+          document.getElementById('scriptAlias').classList.add('invalid');
+          hasError = true;
+        } else if (!appState.editingScriptAlias && appState.scripts.some(s => s.alias === alias)) {
+          document.getElementById('errAlias').textContent = 'A script with this alias already exists.';
+          document.getElementById('scriptAlias').classList.add('invalid');
+          hasError = true;
+        }
+        if (!cmd) {
+          document.getElementById('errCmd').textContent = 'Command is required.';
+          document.getElementById('scriptCmd').classList.add('invalid');
+          hasError = true;
+        }
+        if (!folder) {
+          document.getElementById('errFolder').textContent = 'Output folder is required.';
+          document.getElementById('scriptOutputFolder').classList.add('invalid');
+          hasError = true;
+        }
+        if (hasError) return;
+
         const payload = {
-          name_alias: document.getElementById('scriptAlias').value,
-          description: document.getElementById('scriptDesc').value,
-          command: document.getElementById('scriptCmd').value,
-          output_folder_path: document.getElementById('scriptOutputFolder').value,
-          cron: document.getElementById('scriptCron').value,
-          host: document.getElementById('scriptHost').value
+          name_alias: alias,
+          description: document.getElementById('scriptDesc').value.trim(),
+          command: cmd,
+          output_folder_path: folder,
+          cron: document.getElementById('scriptCron').value.trim(),
+          host: document.getElementById('scriptHost').value.trim()
         };
 
-        if (appState.editingScriptAlias) {
-          await fetch(`/api/scripts/${encodeURIComponent(appState.editingScriptAlias)}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-        } else {
-          await fetch('/api/scripts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
+        const saveBtn = document.getElementById('btnSaveScript');
+        saveBtn.disabled = true;
+        try {
+          let res;
+          if (appState.editingScriptAlias) {
+            res = await fetch(`/api/scripts/${encodeURIComponent(appState.editingScriptAlias)}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+          } else {
+            res = await fetch('/api/scripts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+          }
+          if (!res.ok) {
+            let msg = `Save failed (HTTP ${res.status}).`;
+            try {
+              const errBody = await res.json();
+              if (errBody && errBody.error) msg = errBody.error;
+            } catch (_) { /* ignore parse failure */ }
+            document.getElementById('errFormGeneral').textContent = msg;
+            return; // modal stays open so the user can fix it
+          }
+          closeModal('modalScript');
+          await fetchScripts();
+          appState.selectedAlias = alias;
+          renderScriptsList();
+          showToast(appState.editingScriptAlias ? `Updated "${alias}".` : `Created "${alias}".`, 'success');
+        } catch (err) {
+          document.getElementById('errFormGeneral').textContent = 'Network error — could not reach server.';
+        } finally {
+          saveBtn.disabled = false;
         }
-        closeModal('modalScript');
-        await fetchScripts();
       };
 
-      // PIPELINES FEATURE
+      // ---------- PIPELINES ----------
       function loadPipelines() {
         appState.pipelines = JSON.parse(localStorage.getItem('sctlPipelines') || '[]');
         document.getElementById('countPipelines').textContent = appState.pipelines.length;
@@ -1672,8 +1625,28 @@
         document.getElementById('countPipelines').textContent = appState.pipelines.length;
       }
 
+      // Drop pipeline steps referencing scripts that no longer exist, and flag it.
+      function pruneMissingPipelineSteps(p) {
+        const existingAliases = new Set(appState.scripts.map(s => s.alias));
+        const keepIdx = [];
+        p.steps.forEach((alias, idx) => {
+          if (existingAliases.has(alias)) keepIdx.push(idx);
+        });
+        if (keepIdx.length === p.steps.length) return false;
+        p.steps = keepIdx.map(i => p.steps[i]);
+        p.stepStatus = keepIdx.map(i => (p.stepStatus && p.stepStatus[i]) || 'idle');
+        return true;
+      }
+
       function renderPipelines() {
         loadPipelines();
+        let anyPruned = false;
+        appState.pipelines.forEach(p => { if (pruneMissingPipelineSteps(p)) anyPruned = true; });
+        if (anyPruned) {
+          savePipelines();
+          showToast('One or more pipelines referenced a deleted script and were updated.', 'error');
+        }
+
         const grid = document.getElementById('pipelinesGrid');
         if (appState.pipelines.length === 0) {
           grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-dim);">No script pipelines created yet. Click "Create Pipeline" to get started.</div>`;
@@ -1681,38 +1654,57 @@
         }
 
         grid.innerHTML = appState.pipelines.map(p => `
-          <div class="pipeline-card" onclick="openPipelineDetail('${p.id}')">
-            <h3 class="pipeline-card-title">${p.name}</h3>
-            <div class="pipeline-card-desc">${p.description || 'No description provided'}</div>
+          <div class="pipeline-card" data-pipeline-id="${escapeHtml(p.id)}">
+            <h3 class="pipeline-card-title">${escapeHtml(p.name)}</h3>
+            <div class="pipeline-card-desc">${escapeHtml(p.description || 'No description provided')}</div>
             <div class="pipeline-steps-preview">
               <strong style="color: var(--accent-hover);">${p.steps.length} Steps:</strong>
-              ${p.steps.map(s => `<span class="pipeline-step-chip">${s}</span>`).join('')}
+              ${p.steps.map(s => `<span class="pipeline-step-chip">${escapeHtml(s)}</span>`).join('')}
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
-              <span class="badge badge-${(p.status || 'idle').toLowerCase()}">${(p.status || 'IDLE').toUpperCase()}</span>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); runPipeline('${p.id}');">▶ Run</button>
+              <span class="badge badge-${escapeHtml((p.status || 'idle').toLowerCase())}">${escapeHtml((p.status || 'IDLE').toUpperCase())}</span>
+              <button type="button" class="btn btn-secondary btn-sm pipeline-run-btn">▶ Run</button>
             </div>
           </div>
         `).join('');
+
+        grid.querySelectorAll('.pipeline-card').forEach(card => {
+          const id = card.dataset.pipelineId;
+          card.onclick = () => openPipelineDetail(id);
+          const runBtn = card.querySelector('.pipeline-run-btn');
+          if (runBtn) {
+            runBtn.onclick = (e) => { e.stopPropagation(); runPipeline(id); };
+          }
+        });
       }
 
       document.getElementById('btnNewPipeline').onclick =
-      document.getElementById('btnCreatePipelineTop').onclick = () => {
+      document.getElementById('btnCreatePipelineTop').onclick = async () => {
         appState.currentPipelineSteps = [];
         document.getElementById('pipeName').value = '';
         document.getElementById('pipeDesc').value = '';
+        document.getElementById('errPipelineGeneral').textContent = '';
+        // Refresh the script list first so the builder never offers stale/deleted scripts.
+        await fetchScripts();
         renderPipelineBuilder();
         openModal('modalPipeline');
       };
 
       function renderPipelineBuilder() {
         const avail = document.getElementById('pipeAvailableScripts');
-        avail.innerHTML = appState.scripts.map(s => `
-          <div style="background: var(--panel-card); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="addScriptToPipeline('${s.alias}')">
-            <span style="font-weight: 600; font-size: 0.85rem;">${s.alias}</span>
-            <span style="color: var(--accent); font-size: 0.8rem;">+ Add</span>
-          </div>
-        `).join('');
+        if (appState.scripts.length === 0) {
+          avail.innerHTML = `<div style="color: var(--text-dim); font-size: 0.8rem; text-align: center; padding: 20px;">No scripts available. Create a script first.</div>`;
+        } else {
+          avail.innerHTML = appState.scripts.map(s => `
+            <div class="pipe-avail-item" data-alias="${escapeHtml(s.alias)}" style="background: var(--panel-card); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-weight: 600; font-size: 0.85rem;">${escapeHtml(s.alias)}</span>
+              <span style="color: var(--accent); font-size: 0.8rem;">+ Add</span>
+            </div>
+          `).join('');
+          avail.querySelectorAll('.pipe-avail-item').forEach(item => {
+            item.onclick = () => addScriptToPipeline(item.dataset.alias);
+          });
+        }
 
         const steps = document.getElementById('pipeStepList');
         if (appState.currentPipelineSteps.length === 0) {
@@ -1724,11 +1716,14 @@
           <div style="background: var(--panel-card); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
             <div>
               <span class="kkey">${idx + 1}</span>
-              <span style="font-weight: 600; font-size: 0.85rem; margin-left: 6px;">${alias}</span>
+              <span style="font-weight: 600; font-size: 0.85rem; margin-left: 6px;">${escapeHtml(alias)}</span>
             </div>
-            <button type="button" class="btn btn-danger btn-sm" style="padding: 2px 6px; font-size: 0.7rem;" onclick="removeScriptFromPipeline(${idx})">Remove</button>
+            <button type="button" class="btn btn-danger btn-sm pipe-remove-step" data-idx="${idx}" style="padding: 2px 6px; font-size: 0.7rem;">Remove</button>
           </div>
         `).join('');
+        steps.querySelectorAll('.pipe-remove-step').forEach(btn => {
+          btn.onclick = () => removeScriptFromPipeline(parseInt(btn.dataset.idx, 10));
+        });
       }
 
       function addScriptToPipeline(alias) {
@@ -1743,11 +1738,23 @@
 
       document.getElementById('formPipeline').onsubmit = (e) => {
         e.preventDefault();
+        const name = document.getElementById('pipeName').value.trim();
+        const errEl = document.getElementById('errPipelineGeneral');
+        if (!name) {
+          errEl.textContent = 'Pipeline name is required.';
+          return;
+        }
+        if (appState.currentPipelineSteps.length === 0) {
+          errEl.textContent = 'Add at least one step before saving.';
+          return;
+        }
+        errEl.textContent = '';
+
         const p = {
           id: 'pipe_' + Date.now(),
-          name: document.getElementById('pipeName').value,
-          description: document.getElementById('pipeDesc').value,
-          steps: appState.currentPipelineSteps,
+          name: name,
+          description: document.getElementById('pipeDesc').value.trim(),
+          steps: [...appState.currentPipelineSteps],
           status: 'idle',
           stepStatus: appState.currentPipelineSteps.map(() => 'idle'),
           logs: ''
@@ -1756,6 +1763,7 @@
         savePipelines();
         closeModal('modalPipeline');
         renderPipelines();
+        showToast(`Pipeline "${name}" created.`, 'success');
       };
 
       function openPipelineDetail(id) {
@@ -1769,9 +1777,9 @@
           <div style="background: var(--panel-card); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span class="kkey">Step ${idx + 1}</span>
-              <strong style="font-size: 0.9rem;">${s}</strong>
+              <strong style="font-size: 0.9rem;">${escapeHtml(s)}</strong>
             </div>
-            <span class="badge badge-${(p.stepStatus?.[idx] || 'idle').toLowerCase()}">${(p.stepStatus?.[idx] || 'IDLE').toUpperCase()}</span>
+            <span class="badge badge-${escapeHtml((p.stepStatus?.[idx] || 'idle').toLowerCase())}">${escapeHtml((p.stepStatus?.[idx] || 'IDLE').toUpperCase())}</span>
           </div>
         `).join('');
 
@@ -1787,6 +1795,7 @@
         const dpr = window.devicePixelRatio || 1;
         canvas.width = canvas.offsetWidth * dpr;
         canvas.height = canvas.offsetHeight * dpr;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(dpr, dpr);
 
         const w = canvas.offsetWidth;
@@ -1805,7 +1814,6 @@
           const x = startX + idx * spacing;
           const y = centerY;
 
-          // Arrow connections
           if (idx < count - 1) {
             const nextX = startX + (idx + 1) * spacing;
             ctx.strokeStyle = '#334155';
@@ -1815,7 +1823,6 @@
             ctx.lineTo(nextX - radius, y);
             ctx.stroke();
 
-            // Arrow head
             ctx.fillStyle = '#6366f1';
             ctx.beginPath();
             ctx.moveTo(nextX - radius, y);
@@ -1824,7 +1831,6 @@
             ctx.fill();
           }
 
-          // Node Circle
           const status = p.stepStatus?.[idx] || 'idle';
           let nodeColor = '#334155';
           if (status === 'success') nodeColor = '#10b981';
@@ -1839,92 +1845,180 @@
           ctx.fill();
           ctx.stroke();
 
-          // Step Number
           ctx.fillStyle = '#ffffff';
           ctx.font = 'bold 14px Inter, sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(idx + 1, x, y);
 
-          // Step Label
           ctx.fillStyle = '#94a3b8';
           ctx.font = '500 12px Inter, sans-serif';
           ctx.fillText(step.length > 14 ? step.substring(0, 12) + '..' : step, x, y + radius + 18);
         });
       }
 
+      // Redraw the graph on resize so it doesn't stay blurry/misaligned
+      // if the window is resized while the pipeline detail modal is open.
+      let resizeRedrawTimer = null;
+      window.addEventListener('resize', () => {
+        clearTimeout(resizeRedrawTimer);
+        resizeRedrawTimer = setTimeout(() => {
+          if (appState.activePipelineId) {
+            const p = appState.pipelines.find(x => x.id === appState.activePipelineId);
+            if (p && document.getElementById('modalPipelineDetail').classList.contains('open')) {
+              drawPipelineGraph(p);
+            }
+          }
+        }, 150);
+      });
+
+      // Poll a script's real state from the backend instead of assuming
+      // success after a fixed delay. Resolves to 'success' or 'failed'.
+      async function waitForScriptCompletion(alias, { pollMs = 1000, timeoutMs = 10 * 60 * 1000 } = {}) {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+          try {
+            const res = await fetch('/api/scripts');
+            if (res.ok) {
+              const data = await res.json();
+              const found = (data.scripts || []).find(s => s.alias === alias);
+              if (found) {
+                if (found.state === 'Failed') return 'failed';
+                if (found.state === 'Idle' || found.state === 'Stopped' || found.state === 'Success') {
+                  return found.state === 'Failed' ? 'failed' : 'success';
+                }
+              }
+            }
+          } catch (err) {
+            // transient network error while polling; keep trying until timeout
+          }
+          await new Promise(r => setTimeout(r, pollMs));
+        }
+        return 'timeout';
+      }
+
       async function runPipeline(id) {
         const p = appState.pipelines.find(x => x.id === id);
         if (!p) return;
+        if (p.status === 'running') {
+          showToast('Pipeline is already running.', 'error');
+          return;
+        }
+
+        const runToken = Symbol('run');
+        appState.pipelineRunTokens[id] = runToken;
+
         p.status = 'running';
+        p.stepStatus = p.steps.map(() => 'idle');
         p.logs = `[${new Date().toLocaleTimeString()}] Pipeline "${p.name}" execution started...\n`;
         savePipelines();
         if (appState.activePipelineId === id) openPipelineDetail(id);
 
+        let pipelineFailed = false;
+
         for (let i = 0; i < p.steps.length; i++) {
+          // Bail out if a newer run superseded this one, or the pipeline was deleted mid-run.
+          if (appState.pipelineRunTokens[id] !== runToken) return;
+          if (!appState.pipelines.find(x => x.id === id)) return;
+
           p.stepStatus[i] = 'running';
           p.logs += `Executing Step ${i + 1}: ${p.steps[i]}...\n`;
           savePipelines();
           if (appState.activePipelineId === id) openPipelineDetail(id);
 
-          await runScript(p.steps[i]);
-          await new Promise(r => setTimeout(r, 2000));
-          p.stepStatus[i] = 'success';
-          p.logs += `Step ${i + 1} (${p.steps[i]}) completed successfully.\n`;
+          try {
+            await runScript(p.steps[i]);
+          } catch (err) {
+            p.stepStatus[i] = 'failed';
+            p.logs += `Step ${i + 1} (${p.steps[i]}) failed to start.\n`;
+            pipelineFailed = true;
+            savePipelines();
+            if (appState.activePipelineId === id) openPipelineDetail(id);
+            break;
+          }
+
+          const result = await waitForScriptCompletion(p.steps[i]);
+          if (appState.pipelineRunTokens[id] !== runToken) return;
+
+          if (result === 'success') {
+            p.stepStatus[i] = 'success';
+            p.logs += `Step ${i + 1} (${p.steps[i]}) completed successfully.\n`;
+          } else if (result === 'failed') {
+            p.stepStatus[i] = 'failed';
+            p.logs += `Step ${i + 1} (${p.steps[i]}) FAILED. Stopping pipeline.\n`;
+            pipelineFailed = true;
+            savePipelines();
+            if (appState.activePipelineId === id) openPipelineDetail(id);
+            break;
+          } else {
+            p.stepStatus[i] = 'failed';
+            p.logs += `Step ${i + 1} (${p.steps[i]}) timed out waiting for completion. Stopping pipeline.\n`;
+            pipelineFailed = true;
+            savePipelines();
+            if (appState.activePipelineId === id) openPipelineDetail(id);
+            break;
+          }
           savePipelines();
           if (appState.activePipelineId === id) openPipelineDetail(id);
         }
 
-        p.status = 'success';
-        p.logs += `[${new Date().toLocaleTimeString()}] Pipeline completed!\n`;
+        p.status = pipelineFailed ? 'failed' : 'success';
+        p.logs += `[${new Date().toLocaleTimeString()}] Pipeline ${pipelineFailed ? 'failed' : 'completed successfully'}!\n`;
         savePipelines();
         renderPipelines();
         if (appState.activePipelineId === id) openPipelineDetail(id);
+        showToast(`Pipeline "${p.name}" ${pipelineFailed ? 'failed' : 'completed'}.`, pipelineFailed ? 'error' : 'success');
       }
 
       document.getElementById('btnRunPipelineModal').onclick = () => {
         if (appState.activePipelineId) runPipeline(appState.activePipelineId);
       };
+      document.getElementById('btnStopPipelineModal').onclick = () => {
+        if (!appState.activePipelineId) return;
+        // Invalidate the run token so the in-flight loop stops advancing further steps.
+        appState.pipelineRunTokens[appState.activePipelineId] = null;
+        const p = appState.pipelines.find(x => x.id === appState.activePipelineId);
+        if (p && p.status === 'running') {
+          p.status = 'stopped';
+          p.logs += `[${new Date().toLocaleTimeString()}] Pipeline stopped by user.\n`;
+          savePipelines();
+          renderPipelines();
+          openPipelineDetail(p.id);
+        }
+      };
       document.getElementById('btnDeletePipelineModal').onclick = () => {
         if (!appState.activePipelineId) return;
         if (!confirm('Delete this pipeline?')) return;
+        appState.pipelineRunTokens[appState.activePipelineId] = null;
         appState.pipelines = appState.pipelines.filter(x => x.id !== appState.activePipelineId);
         savePipelines();
         closeModal('modalPipelineDetail');
         renderPipelines();
       };
 
-      // Control buttons
+      // ---------- Control buttons ----------
       document.getElementById('btnRefresh').onclick = fetchScripts;
       document.getElementById('btnSettings').onclick = () => openModal('modalSettings');
       document.getElementById('btnHelp').onclick = () => openModal('modalHelp');
 
-      // KEYBOARD SHORTCUT LISTENERS
+      document.getElementById('settingAutoRefresh').onchange = (e) => {
+        applyPollingSetting(e.target.value);
+      };
+
+      // ---------- KEYBOARD SHORTCUT LISTENERS ----------
       document.addEventListener('keydown', (e) => {
-        // If target is inside an input, textarea, select, or button, don't hijack Enter
         if (e.target.matches('input, textarea, select, button')) {
           if (e.key === 'Escape') {
             e.target.blur();
-            closeModal('modalScript');
-            closeModal('modalPipeline');
-            closeModal('modalSettings');
-            closeModal('modalHelp');
-            closeModal('modalHistory');
-            closeModal('modalPipelineDetail');
+            closeAllModals();
           }
-          if (e.key === 'Enter' && e.target.tagName === 'BUTTON') {
-            return;
-          }
-          if (e.target.matches('input, textarea, select')) {
-            return;
-          }
+          if (e.key === 'Enter' && e.target.tagName === 'BUTTON') return;
+          if (e.target.matches('input, textarea, select')) return;
         }
 
         const isModalOpen = document.querySelector('.modal-backdrop.open');
         if (isModalOpen) {
-          if (e.key === 'Escape') {
-            document.querySelectorAll('.modal-backdrop.open').forEach(m => m.classList.remove('open'));
-          }
+          if (e.key === 'Escape') closeAllModals();
           return;
         }
 
@@ -1941,26 +2035,33 @@
             e.preventDefault();
             searchBox.focus();
             break;
-          case 'arrowup':
+          case 'arrowup': {
             e.preventDefault();
-            if (appState.filteredScripts.length > 0) {
-              appState.selectedIdx = Math.max(0, appState.selectedIdx - 1);
+            const list = appState.filteredScripts;
+            if (list.length > 0) {
+              const curIdx = Math.max(0, list.findIndex(s => s.alias === appState.selectedAlias));
+              const newIdx = Math.max(0, curIdx - 1);
+              appState.selectedAlias = list[newIdx].alias;
               renderScriptsList();
               scrollToSelectedCard();
             }
             break;
-          case 'arrowdown':
+          }
+          case 'arrowdown': {
             e.preventDefault();
-            if (appState.filteredScripts.length > 0) {
-              appState.selectedIdx = Math.min(appState.filteredScripts.length - 1, appState.selectedIdx + 1);
+            const list = appState.filteredScripts;
+            if (list.length > 0) {
+              const curIdx = Math.max(0, list.findIndex(s => s.alias === appState.selectedAlias));
+              const newIdx = Math.min(list.length - 1, curIdx + 1);
+              appState.selectedAlias = list[newIdx].alias;
               renderScriptsList();
               scrollToSelectedCard();
             }
             break;
+          }
           case 'enter':
             e.preventDefault();
-            const s = getSelectedScript();
-            if (s) runScript(s.alias);
+            { const s = getSelectedScript(); if (s) runScript(s.alias); }
             break;
           case 'r':
             e.preventDefault();
@@ -2009,10 +2110,11 @@
         }
       });
 
-      // INITIALIZATION
+      // ---------- INITIALIZATION ----------
       loadPipelines();
       fetchScripts();
       connectSSE();
+      applyPollingSetting(document.getElementById('settingAutoRefresh').value);
     </script>
   </body>
 </html>

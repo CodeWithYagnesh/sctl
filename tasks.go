@@ -68,6 +68,15 @@ func getTaskHistory(folderPath string) ([]TaskSummary, error) {
 	return history, nil
 }
 
+// taskIDMutexes provides per-output-folder locking for atomic task ID allocation.
+// Keyed by folder path, created on demand.
+var taskIDMutexes sync.Map
+
+func getFolderMutex(folderPath string) *sync.Mutex {
+	mu, _ := taskIDMutexes.LoadOrStore(folderPath, &sync.Mutex{})
+	return mu.(*sync.Mutex)
+}
+
 func getNextTaskID(folderPath string) int {
 	if _, err := os.Stat(folderPath); os.IsNotExist(err) {
 		return 1
@@ -117,6 +126,9 @@ func writeTaskFile(folderPath string, taskID int, nameAlias string, state string
 }
 
 func StartTask(nameAlias string, command string, folderPath string, input map[string]interface{}) (*exec.Cmd, int, error) {
+	// Hold per-folder mutex across ID allocation AND initial write to prevent races
+	mu := getFolderMutex(folderPath)
+	mu.Lock()
 	taskID := getNextTaskID(folderPath)
 	cmd := exec.Command("bash", "-c", command)
 	prepareCmd(cmd)
@@ -140,8 +152,10 @@ func StartTask(nameAlias string, command string, folderPath string, input map[st
 	if err != nil {
 		w.Close()
 		r.Close()
+		mu.Unlock()
 		return nil, 0, err
 	}
+	mu.Unlock()
 
 	if program != nil {
 		program.Send(TaskUpdateMsg{
