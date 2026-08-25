@@ -118,6 +118,8 @@ func initialModel() *model {
 		groupListOffset:   0,
 		groupFormInputs:   groupInputs,
 		groupFocusedInput: 0,
+		groupActivePanel:  panelLeft,
+		groupScriptCursor: 0,
 	}
 	m.applyTheme()
 	return m
@@ -495,11 +497,36 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // ─── Group View Handlers ─────────────────────────────────────────────────────
 
+func (m *model) stopGroupScripts() {
+	if m.groupCursor >= len(m.groups) {
+		return
+	}
+	group := m.groups[m.groupCursor]
+	memberSet := make(map[string]bool)
+	for _, alias := range group.Scripts {
+		memberSet[alias] = true
+	}
+	stoppedAny := false
+	for i := range m.scripts {
+		if memberSet[m.scripts[i].Config.NameAlias] && m.scripts[i].State == "Running" && m.scripts[i].Cmd != nil {
+			_ = StopTask(m.scripts[i].Cmd)
+			stoppedAny = true
+		}
+	}
+	if stoppedAny {
+		m.statusMsg = fmt.Sprintf("Stopped running scripts in group '%s'.", group.Name)
+	} else {
+		m.statusMsg = fmt.Sprintf("No running scripts in group '%s'.", group.Name)
+	}
+	m.statusMsgTime = time.Now()
+}
+
 func (m *model) updateGroupView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	switch key {
 	case "esc", "g":
 		m.activeView = "main"
+		m.groupActivePanel = panelLeft
 		return m, nil
 	case "q":
 		for i := range m.scripts {
@@ -508,23 +535,49 @@ func (m *model) updateGroupView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, tea.Quit
+	case "tab":
+		if m.groupActivePanel == panelLeft {
+			m.groupActivePanel = panelRight
+		} else {
+			m.groupActivePanel = panelLeft
+		}
+		return m, nil
 	case "up", "k":
-		if m.groupCursor > 0 {
-			m.groupCursor--
+		if m.groupActivePanel == panelLeft {
+			if m.groupCursor > 0 {
+				m.groupCursor--
+				m.groupScriptCursor = 0
+			}
+		} else {
+			if m.groupCursor < len(m.groups) && m.groupScriptCursor > 0 {
+				m.groupScriptCursor--
+			}
 		}
 		return m, nil
 	case "down", "j":
-		if m.groupCursor < len(m.groups)-1 {
-			m.groupCursor++
+		if m.groupActivePanel == panelLeft {
+			if m.groupCursor < len(m.groups)-1 {
+				m.groupCursor++
+				m.groupScriptCursor = 0
+			}
+		} else {
+			if m.groupCursor < len(m.groups) {
+				group := m.groups[m.groupCursor]
+				if m.groupScriptCursor < len(group.Scripts)-1 {
+					m.groupScriptCursor++
+				}
+			}
 		}
 		return m, nil
 	case "a":
-		m.editingGroupName = ""
-		m.activeView = "group_form"
-		m.initGroupForm()
+		if m.groupActivePanel == panelLeft {
+			m.editingGroupName = ""
+			m.activeView = "group_form"
+			m.initGroupForm()
+		}
 		return m, nil
 	case "e":
-		if len(m.groups) > 0 {
+		if m.groupActivePanel == panelLeft && len(m.groups) > 0 {
 			g := m.groups[m.groupCursor]
 			m.editingGroupName = g.Name
 			m.activeView = "group_form"
@@ -541,13 +594,13 @@ func (m *model) updateGroupView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "enter":
-		if len(m.groups) > 0 {
+		if m.groupActivePanel == panelLeft && len(m.groups) > 0 {
 			m.activeView = "group_members"
 			m.initGroupMembers()
 		}
 		return m, nil
 	case "d", "delete":
-		if len(m.groups) > 0 {
+		if m.groupActivePanel == panelLeft && len(m.groups) > 0 {
 			m.activeView = "group_delete_confirm"
 			m.confirmDeleteFocused = 0
 		}
@@ -555,10 +608,12 @@ func (m *model) updateGroupView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		cmd := m.runGroup()
 		return m, cmd
+	case "s":
+		m.stopGroupScripts()
+		return m, nil
 	}
 	return m, nil
 }
-
 func (m *model) updateGroupForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	switch key {

@@ -137,6 +137,8 @@ type model struct {
 	editingGroupName   string
 	groupMemberCursor  int
 	groupMemberChecked []bool
+	groupActivePanel  activePanel
+	groupScriptCursor int
 }
 
 type TaskStartedMsg struct {
