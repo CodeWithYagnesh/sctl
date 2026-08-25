@@ -83,6 +83,102 @@ func runHeadless(alias string) error {
 	return nil
 }
 
+func runHeadlessGroup(name string) error {
+	cfg, err := LoadConfig()
+	if err != nil {
+		return fmt.Errorf("error loading config: %v", err)
+	}
+
+	var target *GroupConfig
+	for _, g := range cfg.Groups {
+		if g.Name == name {
+			gc := g
+			target = &gc
+			break
+		}
+	}
+	if target == nil {
+		return fmt.Errorf("group %q not found", name)
+	}
+
+	// Build alias -> ScriptConfig map
+	scriptMap := make(map[string]ScriptConfig)
+	for _, s := range cfg.Scripts {
+		scriptMap[s.NameAlias] = s
+	}
+
+	var scripts []ScriptConfig
+	for _, alias := range target.Scripts {
+		sc, ok := scriptMap[alias]
+		if !ok {
+			return fmt.Errorf("group %q references unknown script %q", name, alias)
+		}
+		scripts = append(scripts, sc)
+	}
+
+	if len(scripts) == 0 {
+		return fmt.Errorf("group %q has no scripts", name)
+	}
+
+	mode := "parallel"
+	if target.Pipeline {
+		mode = "pipeline"
+	}
+	fmt.Printf("[sctl] Running group '%s' (%s, %d script(s))...\n", name, mode, len(scripts))
+
+	type result struct {
+		alias  string
+		err    error
+		state  string
+		taskID int
+	}
+
+	if target.Pipeline {
+		// Sequential execution
+		for _, sc := range scripts {
+			fmt.Printf("\n--- [%s] ---\n", sc.NameAlias)
+			err := runHeadless(sc.NameAlias)
+			if err != nil {
+				return fmt.Errorf("group '%s' pipeline failed at script '%s': %v", name, sc.NameAlias, err)
+			}
+		}
+		fmt.Printf("\n[sctl] Group '%s' completed successfully.\n", name)
+		return nil
+	}
+
+	// Parallel execution
+	results := make(chan result, len(scripts))
+	for _, sc := range scripts {
+		go func(s ScriptConfig) {
+			err := runHeadless(s.NameAlias)
+			var state string
+			if err != nil {
+				state = "Failed"
+			} else {
+				state = "Success"
+			}
+			results <- result{alias: s.NameAlias, err: err, state: state}
+		}(sc)
+	}
+
+	allOK := true
+	for i := 0; i < len(scripts); i++ {
+		res := <-results
+		if res.err != nil {
+			allOK = false
+			fmt.Fprintf(os.Stderr, "[sctl] Script '%s' finished with error: %v\n", res.alias, res.err)
+		} else {
+			fmt.Printf("[sctl] Script '%s' finished: %s\n", res.alias, res.state)
+		}
+	}
+
+	if !allOK {
+		return fmt.Errorf("group '%s' finished with errors", name)
+	}
+	fmt.Printf("\n[sctl] Group '%s' completed successfully.\n", name)
+	return nil
+}
+
 func printHelp() {
 	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#ff007f")).Bold(true)
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#00ffd7")).Bold(true)
@@ -114,6 +210,7 @@ func printHelp() {
 
 	fmt.Println(headerStyle.Render(" FLAGS:"))
 	fmt.Printf("   %-30s %s\n", keyStyle.Render("--run, -run <alias>"), descStyle.Render("Execute the specified script in headless mode with real-time logging"))
+	fmt.Printf("   %-30s %s\n", keyStyle.Render("--run-group, -run-group <name>"), descStyle.Render("Execute all scripts in a group (pipeline or parallel) in headless mode"))
 	fmt.Printf("   %-30s %s\n", keyStyle.Render("--version, -v"), descStyle.Render("Print version and author information"))
 	fmt.Printf("   %-30s %s\n", keyStyle.Render("--help, -h"), descStyle.Render("Show this help message and exit"))
 	fmt.Println()
@@ -126,11 +223,13 @@ func printHelp() {
 	fmt.Printf("   %-25s %s\n", keyStyle.Render("r"), descStyle.Render("Run the selected (or checked) script(s)"))
 	fmt.Printf("   %-25s %s\n", keyStyle.Render("s"), descStyle.Render("Force stop the currently running process"))
 	fmt.Printf("   %-25s %s\n", keyStyle.Render("a"), descStyle.Render("Create a new script configuration"))
+	fmt.Printf("   %-25s %s\n", keyStyle.Render("e"), descStyle.Render("Edit the selected script configuration"))
 	fmt.Printf("   %-25s %s\n", keyStyle.Render("Enter"), descStyle.Render("Edit schedule and environment variables for the selected script"))
 	fmt.Printf("   %-25s %s\n", keyStyle.Render("d / Delete"), descStyle.Render("Remove the selected script configuration"))
 	fmt.Printf("   %-25s %s\n", keyStyle.Render("h / H"), descStyle.Render("View task execution history and load past logs"))
 	fmt.Printf("   %-25s %s\n", keyStyle.Render("p"), descStyle.Render("Toggle parallel execution mode (concurrently or sequentially)"))
 	fmt.Printf("   %-25s %s\n", keyStyle.Render("o"), descStyle.Render("Open the latest HTML report/output in system default browser"))
+	fmt.Printf("   %-25s %s\n", keyStyle.Render("g"), descStyle.Render("Open the Groups management view"))
 	fmt.Printf("   %-25s %s\n", keyStyle.Render("[ / ] or PgUp/PgDn"), descStyle.Render("Scroll logs viewport up / down"))
 	fmt.Printf("   %-25s %s\n", keyStyle.Render("q / Ctrl+C"), descStyle.Render("Quit the application"))
 	fmt.Println()
@@ -147,9 +246,19 @@ func printHelp() {
 
 func main() {
 	if len(os.Args) != 1 {
+		// --run <alias>
 		if len(os.Args) >= 3 && (os.Args[1] == "--run" || os.Args[1] == "-run") {
 			alias := os.Args[2]
 			if err := runHeadless(alias); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			os.Exit(0)
+		}
+		// --run-group <name>
+		if len(os.Args) >= 3 && (os.Args[1] == "--run-group" || os.Args[1] == "-run-group") {
+			name := os.Args[2]
+			if err := runHeadlessGroup(name); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}

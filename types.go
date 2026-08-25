@@ -32,9 +32,17 @@ type ScriptConfig struct {
 	Input            map[string]interface{} `yaml:"input,omitempty"`
 	Cron             string                 `yaml:"cron,omitempty"`
 	Notify           bool                   `yaml:"notify,omitempty"`
-	// Host, if non-empty, causes the command to run remotely via SSH.
-	// Format: user@hostname or hostname (uses your default SSH key/config).
-	Host string `yaml:"host,omitempty"`
+	Host             string                 `yaml:"host,omitempty"`
+}
+
+// GroupConfig defines a collection of scripts that can be run together.
+// Pipeline=true means scripts run sequentially (one by one).
+// Pipeline=false means scripts run in parallel.
+type GroupConfig struct {
+	Name        string   `yaml:"name"`
+	Description string   `yaml:"description"`
+	Pipeline    bool     `yaml:"pipeline"`
+	Scripts     []string `yaml:"scripts"`
 }
 
 type ThemeConfig struct {
@@ -48,6 +56,7 @@ type ThemeConfig struct {
 
 type Config struct {
 	Scripts []ScriptConfig `yaml:"scripts"`
+	Groups  []GroupConfig  `yaml:"groups,omitempty"`
 	Theme   ThemeConfig    `yaml:"theme,omitempty"`
 }
 
@@ -113,15 +122,23 @@ type model struct {
 	statusMsgTime        time.Time
 	historyItems         []TaskSummary
 	historyCursor        int
-	// editingAlias holds the NameAlias of the script being edited.
-	// Empty string means the form is in "Add" mode; non-empty means "Edit" mode.
-	editingAlias string
-	// filterQuery is the current live search string; empty means no filter.
-	filterQuery string
-	filterInput textinput.Model
-	// listOffset is the top visible index for script card list windowing in renderLeftPanel.
-	listOffset  int
-	theme       ThemeConfig
+	editingAlias         string
+	filterQuery          string
+	filterInput          textinput.Model
+	listOffset           int
+	theme                ThemeConfig
+
+	// Group management state
+	groups             []GroupConfig
+	groupCursor        int
+	groupListOffset    int
+	groupFormInputs    []textinput.Model
+	groupFocusedInput  int
+	editingGroupName   string
+	groupMemberCursor  int
+	groupMemberChecked []bool
+	groupActivePanel  activePanel
+	groupScriptCursor int
 }
 
 type TaskStartedMsg struct {
@@ -140,9 +157,6 @@ type TickMsg time.Time
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
-// --- Professional Color Palette ---
-// Accent: Indigo (#6366f1), Emerald (#10b981), Rose (#f43f5e), Amber (#f59e0b)
-// Neutrals: Slate dark (#0f1117), border dim (#2d3748), border bright (#4a5568)
 var (
 	focusedStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -158,35 +172,30 @@ var (
 			Bold(true).
 			Foreground(lipgloss.Color("#6366f1"))
 
-	// Running: bright emerald-green
 	badgeRunning = lipgloss.NewStyle().
 			Background(lipgloss.Color("#10b981")).
 			Foreground(lipgloss.Color("#ffffff")).
 			Bold(true).
 			Padding(0, 1)
 
-	// Success: muted green-teal
 	badgeSuccess = lipgloss.NewStyle().
 			Background(lipgloss.Color("#059669")).
 			Foreground(lipgloss.Color("#ffffff")).
 			Bold(true).
 			Padding(0, 1)
 
-	// Failed: rose-red
 	badgeFailed = lipgloss.NewStyle().
 			Background(lipgloss.Color("#f43f5e")).
 			Foreground(lipgloss.Color("#ffffff")).
 			Bold(true).
 			Padding(0, 1)
 
-	// Stopped: amber-orange
 	badgeStopped = lipgloss.NewStyle().
 			Background(lipgloss.Color("#f59e0b")).
 			Foreground(lipgloss.Color("#000000")).
 			Bold(true).
 			Padding(0, 1)
 
-	// Idle: muted slate
 	badgeIdle = lipgloss.NewStyle().
 			Background(lipgloss.Color("#374151")).
 			Foreground(lipgloss.Color("#9ca3af")).

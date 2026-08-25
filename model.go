@@ -82,20 +82,44 @@ func initialModel() *model {
 	}
 	inputs[0].Focus()
 
+	// Initialize group form inputs
+	groupInputs := make([]textinput.Model, 3)
+	for i := range groupInputs {
+		t := textinput.New()
+		t.Width = 40
+		switch i {
+		case 0:
+			t.Placeholder = "e.g., deploy_pipeline"
+		case 1:
+			t.Placeholder = "e.g., Deploy to production"
+		case 2:
+			t.Placeholder = "y / n (pipeline = sequential execution)"
+		}
+		groupInputs[i] = t
+	}
+	groupInputs[0].Focus()
+
 	m := &model{
-		config:        cfg,
-		scripts:       scripts,
-		cursor:        0,
-		activePanel:   panelLeft,
-		parallelMode:  false,
-		viewport:      viewport.New(0, 0),
-		runningIndex:  -1,
-		activeView:    "main",
-		formInputs:    inputs,
-		focusedInput:  0,
-		statusMsg:     "Welcome to sctl! Select a script and press 'R' to run.",
-		statusMsgTime: time.Time{},
-		theme:         cfg.Theme,
+		config:            cfg,
+		scripts:           scripts,
+		cursor:            0,
+		activePanel:       panelLeft,
+		parallelMode:      false,
+		viewport:          viewport.New(0, 0),
+		runningIndex:      -1,
+		activeView:        "main",
+		formInputs:        inputs,
+		focusedInput:      0,
+		statusMsg:         "Welcome to sctl! Select a script and press 'R' to run. Press 'G' for Groups.",
+		statusMsgTime:     time.Time{},
+		theme:             cfg.Theme,
+		groups:            cfg.Groups,
+		groupCursor:       0,
+		groupListOffset:   0,
+		groupFormInputs:   groupInputs,
+		groupFocusedInput: 0,
+		groupActivePanel:  panelLeft,
+		groupScriptCursor: 0,
 	}
 	m.applyTheme()
 	return m
@@ -301,6 +325,20 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateFilterView(msg)
 		}
 
+		// Group views
+		if m.activeView == "groups" {
+			return m.updateGroupView(msg)
+		}
+		if m.activeView == "group_form" {
+			return m.updateGroupForm(msg)
+		}
+		if m.activeView == "group_members" {
+			return m.updateGroupMembers(msg)
+		}
+		if m.activeView == "group_delete_confirm" {
+			return m.updateGroupDeleteConfirm(msg)
+		}
+
 		switch key {
 		case "q":
 			for i := range m.scripts {
@@ -447,10 +485,452 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.updateViewport()
 			}
 			return m, nil
+		case "g":
+			m.activeView = "groups"
+			m.groupCursor = 0
+			m.groups = m.config.Groups
+			return m, nil
 		}
 	}
 	return m, nil
 }
+
+// ─── Group View Handlers ─────────────────────────────────────────────────────
+
+func (m *model) stopGroupScripts() {
+	if m.groupCursor >= len(m.groups) {
+		return
+	}
+	group := m.groups[m.groupCursor]
+	memberSet := make(map[string]bool)
+	for _, alias := range group.Scripts {
+		memberSet[alias] = true
+	}
+	stoppedAny := false
+	for i := range m.scripts {
+		if memberSet[m.scripts[i].Config.NameAlias] && m.scripts[i].State == "Running" && m.scripts[i].Cmd != nil {
+			_ = StopTask(m.scripts[i].Cmd)
+			stoppedAny = true
+		}
+	}
+	if stoppedAny {
+		m.statusMsg = fmt.Sprintf("Stopped running scripts in group '%s'.", group.Name)
+	} else {
+		m.statusMsg = fmt.Sprintf("No running scripts in group '%s'.", group.Name)
+	}
+	m.statusMsgTime = time.Now()
+}
+
+func (m *model) updateGroupView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	switch key {
+	case "esc", "g":
+		m.activeView = "main"
+		m.groupActivePanel = panelLeft
+		return m, nil
+	case "q":
+		for i := range m.scripts {
+			if m.scripts[i].Cmd != nil {
+				_ = StopTask(m.scripts[i].Cmd)
+			}
+		}
+		return m, tea.Quit
+	case "tab":
+		if m.groupActivePanel == panelLeft {
+			m.groupActivePanel = panelRight
+		} else {
+			m.groupActivePanel = panelLeft
+		}
+		return m, nil
+	case "up", "k":
+		if m.groupActivePanel == panelLeft {
+			if m.groupCursor > 0 {
+				m.groupCursor--
+				m.groupScriptCursor = 0
+			}
+		} else {
+			if m.groupCursor < len(m.groups) && m.groupScriptCursor > 0 {
+				m.groupScriptCursor--
+			}
+		}
+		return m, nil
+	case "down", "j":
+		if m.groupActivePanel == panelLeft {
+			if m.groupCursor < len(m.groups)-1 {
+				m.groupCursor++
+				m.groupScriptCursor = 0
+			}
+		} else {
+			if m.groupCursor < len(m.groups) {
+				group := m.groups[m.groupCursor]
+				if m.groupScriptCursor < len(group.Scripts)-1 {
+					m.groupScriptCursor++
+				}
+			}
+		}
+		return m, nil
+	case "a":
+		if m.groupActivePanel == panelLeft {
+			m.editingGroupName = ""
+			m.activeView = "group_form"
+			m.initGroupForm()
+		}
+		return m, nil
+	case "e":
+		if m.groupActivePanel == panelLeft && len(m.groups) > 0 {
+			g := m.groups[m.groupCursor]
+			m.editingGroupName = g.Name
+			m.activeView = "group_form"
+			m.initGroupForm()
+			m.groupFormInputs[0].SetValue(g.Name)
+			m.groupFormInputs[1].SetValue(g.Description)
+			if g.Pipeline {
+				m.groupFormInputs[2].SetValue("y")
+			} else {
+				m.groupFormInputs[2].SetValue("n")
+			}
+			m.groupFocusedInput = 0
+			m.groupFormInputs[0].Focus()
+		}
+		return m, nil
+	case "enter":
+		if m.groupActivePanel == panelLeft && len(m.groups) > 0 {
+			m.activeView = "group_members"
+			m.initGroupMembers()
+		}
+		return m, nil
+	case "d", "delete":
+		if m.groupActivePanel == panelLeft && len(m.groups) > 0 {
+			m.activeView = "group_delete_confirm"
+			m.confirmDeleteFocused = 0
+		}
+		return m, nil
+	case "r":
+		cmd := m.runGroup()
+		return m, cmd
+	case "s":
+		m.stopGroupScripts()
+		return m, nil
+	}
+	return m, nil
+}
+func (m *model) updateGroupForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	switch key {
+	case "esc":
+		m.activeView = "groups"
+		return m, nil
+	case "tab", "down":
+		if m.groupFocusedInput < 4 {
+			if m.groupFocusedInput < 3 {
+				m.groupFormInputs[m.groupFocusedInput].Blur()
+			}
+			m.groupFocusedInput++
+			if m.groupFocusedInput < 3 {
+				m.groupFormInputs[m.groupFocusedInput].Focus()
+			}
+		} else {
+			m.groupFocusedInput = 0
+			m.groupFormInputs[0].Focus()
+		}
+		return m, nil
+	case "shift+tab", "up":
+		if m.groupFocusedInput > 0 {
+			if m.groupFocusedInput < 3 {
+				m.groupFormInputs[m.groupFocusedInput].Blur()
+			}
+			m.groupFocusedInput--
+			if m.groupFocusedInput < 3 {
+				m.groupFormInputs[m.groupFocusedInput].Focus()
+			}
+		} else {
+			if m.groupFocusedInput < 3 {
+				m.groupFormInputs[m.groupFocusedInput].Blur()
+			}
+			m.groupFocusedInput = 4
+		}
+		return m, nil
+	case "enter":
+		if m.groupFocusedInput == 3 {
+			m.submitGroupForm()
+		} else if m.groupFocusedInput == 4 {
+			m.activeView = "groups"
+		} else {
+			m.groupFormInputs[m.groupFocusedInput].Blur()
+			m.groupFocusedInput++
+			if m.groupFocusedInput < 3 {
+				m.groupFormInputs[m.groupFocusedInput].Focus()
+			}
+		}
+		return m, nil
+	}
+	if m.groupFocusedInput < 3 {
+		var cmd tea.Cmd
+		m.groupFormInputs[m.groupFocusedInput], cmd = m.groupFormInputs[m.groupFocusedInput].Update(msg)
+		return m, cmd
+	}
+	return m, nil
+}
+
+func (m *model) updateGroupMembers(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	switch key {
+	case "esc":
+		m.activeView = "groups"
+		return m, nil
+	case "up", "k":
+		if m.groupMemberCursor > 0 {
+			m.groupMemberCursor--
+		}
+		return m, nil
+	case "down", "j":
+		if m.groupMemberCursor < len(m.scripts)-1 {
+			m.groupMemberCursor++
+		}
+		return m, nil
+	case " ":
+		if len(m.scripts) > 0 {
+			m.groupMemberChecked[m.groupMemberCursor] = !m.groupMemberChecked[m.groupMemberCursor]
+		}
+		return m, nil
+	case "enter", "s":
+		m.submitGroupMembers()
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m *model) updateGroupDeleteConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	switch key {
+	case "esc":
+		m.activeView = "groups"
+		return m, nil
+	case "left", "right", "tab", "shift+tab":
+		if m.confirmDeleteFocused == 0 {
+			m.confirmDeleteFocused = 1
+		} else {
+			m.confirmDeleteFocused = 0
+		}
+		return m, nil
+	case "enter":
+		if m.confirmDeleteFocused == 1 {
+			m.deleteSelectedGroup()
+		} else {
+			m.activeView = "groups"
+		}
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m *model) initGroupForm() {
+	m.groupFormInputs = make([]textinput.Model, 3)
+	for i := range m.groupFormInputs {
+		t := textinput.New()
+		t.Width = 40
+		switch i {
+		case 0:
+			t.Placeholder = "e.g., deploy_pipeline"
+		case 1:
+			t.Placeholder = "e.g., Deploy to production"
+		case 2:
+			t.Placeholder = "y / n (pipeline = sequential execution)"
+		}
+		m.groupFormInputs[i] = t
+	}
+	m.groupFormInputs[0].Focus()
+	m.groupFocusedInput = 0
+}
+
+func (m *model) initGroupMembers() {
+	m.groupMemberCursor = 0
+	m.groupMemberChecked = make([]bool, len(m.scripts))
+
+	if m.groupCursor >= len(m.groups) {
+		return
+	}
+	group := m.groups[m.groupCursor]
+	memberSet := make(map[string]bool)
+	for _, alias := range group.Scripts {
+		memberSet[alias] = true
+	}
+	for i, s := range m.scripts {
+		m.groupMemberChecked[i] = memberSet[s.Config.NameAlias]
+	}
+}
+
+func (m *model) submitGroupForm() {
+	name := strings.TrimSpace(m.groupFormInputs[0].Value())
+	desc := strings.TrimSpace(m.groupFormInputs[1].Value())
+	pipelineVal := strings.ToLower(strings.TrimSpace(m.groupFormInputs[2].Value()))
+	pipeline := pipelineVal == "y" || pipelineVal == "yes"
+
+	if name == "" {
+		m.statusMsg = "Error: Group name is required."
+		m.statusMsgTime = time.Now()
+		return
+	}
+
+	if m.editingGroupName != "" {
+		if name != m.editingGroupName {
+			for _, g := range m.config.Groups {
+				if g.Name == name {
+					m.statusMsg = fmt.Sprintf("Error: Group '%s' already exists.", name)
+					m.statusMsgTime = time.Now()
+					return
+				}
+			}
+		}
+		for i, g := range m.config.Groups {
+			if g.Name == m.editingGroupName {
+				m.config.Groups[i].Name = name
+				m.config.Groups[i].Description = desc
+				m.config.Groups[i].Pipeline = pipeline
+				break
+			}
+		}
+	} else {
+		for _, g := range m.config.Groups {
+			if g.Name == name {
+				m.statusMsg = fmt.Sprintf("Error: Group '%s' already exists.", name)
+				m.statusMsgTime = time.Now()
+				return
+			}
+		}
+		m.config.Groups = append(m.config.Groups, GroupConfig{
+			Name:        name,
+			Description: desc,
+			Pipeline:    pipeline,
+			Scripts:     []string{},
+		})
+	}
+
+	err := SaveConfig(m.config)
+	if err != nil {
+		m.statusMsg = fmt.Sprintf("Error saving config: %v", err)
+		m.statusMsgTime = time.Now()
+		return
+	}
+
+	m.groups = m.config.Groups
+	m.statusMsg = fmt.Sprintf("Group '%s' saved successfully.", name)
+	m.statusMsgTime = time.Now()
+	m.editingGroupName = ""
+	m.activeView = "groups"
+}
+
+func (m *model) deleteSelectedGroup() {
+	if len(m.groups) == 0 {
+		m.activeView = "groups"
+		return
+	}
+	idx := m.groupCursor
+	name := m.groups[idx].Name
+
+	m.config.Groups = append(m.config.Groups[:idx], m.config.Groups[idx+1:]...)
+	_ = SaveConfig(m.config)
+	m.groups = m.config.Groups
+
+	if m.groupCursor >= len(m.groups) {
+		m.groupCursor = len(m.groups) - 1
+	}
+	if m.groupCursor < 0 {
+		m.groupCursor = 0
+	}
+
+	m.activeView = "groups"
+	m.statusMsg = fmt.Sprintf("Group '%s' deleted.", name)
+	m.statusMsgTime = time.Now()
+}
+
+func (m *model) submitGroupMembers() {
+	if m.groupCursor >= len(m.groups) {
+		return
+	}
+	var newScripts []string
+	for i, checked := range m.groupMemberChecked {
+		if checked {
+			newScripts = append(newScripts, m.scripts[i].Config.NameAlias)
+		}
+	}
+	m.config.Groups[m.groupCursor].Scripts = newScripts
+	err := SaveConfig(m.config)
+	if err != nil {
+		m.statusMsg = fmt.Sprintf("Error saving group: %v", err)
+		m.statusMsgTime = time.Now()
+		return
+	}
+	m.groups = m.config.Groups
+	m.statusMsg = fmt.Sprintf("Group '%s' membership updated (%d scripts).", m.groups[m.groupCursor].Name, len(newScripts))
+	m.statusMsgTime = time.Now()
+	m.activeView = "groups"
+}
+
+func (m *model) runGroup() tea.Cmd {
+	if len(m.groups) == 0 || m.groupCursor >= len(m.groups) {
+		m.statusMsg = "No group selected."
+		m.statusMsgTime = time.Now()
+		return nil
+	}
+	group := m.groups[m.groupCursor]
+
+	var indicesToRun []int
+	for _, alias := range group.Scripts {
+		for i, s := range m.scripts {
+			if s.Config.NameAlias == alias {
+				indicesToRun = append(indicesToRun, i)
+				break
+			}
+		}
+	}
+
+	if len(indicesToRun) == 0 {
+		m.statusMsg = fmt.Sprintf("Group '%s' has no scripts to run.", group.Name)
+		m.statusMsgTime = time.Now()
+		return nil
+	}
+
+	mode := "parallel"
+	if group.Pipeline {
+		mode = "pipeline"
+	}
+	m.statusMsg = fmt.Sprintf("Running group '%s' (%s, %d script(s))...", group.Name, mode, len(indicesToRun))
+	m.statusMsgTime = time.Now()
+
+	if group.Pipeline {
+		for _, idx := range indicesToRun {
+			inQueue := false
+			for _, q := range m.runQueue {
+				if q == idx {
+					inQueue = true
+					break
+				}
+			}
+			if !inQueue && m.runningIndex != idx && m.scripts[idx].State != "Running" {
+				m.scripts[idx].Logs = ""
+				m.scripts[idx].Progress = 0
+				m.scripts[idx].State = "Idle"
+				m.runQueue = append(m.runQueue, idx)
+			}
+		}
+		if m.runningIndex == -1 {
+			return m.runNextSequentialCmd()
+		}
+	} else {
+		var cmds []tea.Cmd
+		for _, idx := range indicesToRun {
+			m.scripts[idx].Logs = ""
+			m.scripts[idx].Progress = 0
+			m.scripts[idx].State = "Running"
+			cmds = append(cmds, m.runTaskCmd(idx))
+		}
+		return tea.Batch(cmds...)
+	}
+	return nil
+}
+
+// ─── Existing helpers ────────────────────────────────────────────────────────
 
 func (m *model) reorderScript(i, j int) {
 	if i < 0 || j < 0 || i >= len(m.scripts) || j >= len(m.scripts) {
@@ -646,6 +1126,14 @@ func (m *model) submitForm() {
 					m.statusMsg = fmt.Sprintf("Error: Alias '%s' is already used by another script.", alias)
 					m.statusMsgTime = time.Now()
 					return
+				}
+			}
+			// Update group references when alias changes
+			for gi := range m.config.Groups {
+				for si, a := range m.config.Groups[gi].Scripts {
+					if a == m.editingAlias {
+						m.config.Groups[gi].Scripts[si] = alias
+					}
 				}
 			}
 		}
@@ -928,6 +1416,19 @@ func (m *model) deleteSelectedScript() {
 	if configIdx >= 0 {
 		m.config.Scripts = append(m.config.Scripts[:configIdx], m.config.Scripts[configIdx+1:]...)
 	}
+
+	// Remove script from all groups
+	for gi := range m.config.Groups {
+		var newScripts []string
+		for _, alias := range m.config.Groups[gi].Scripts {
+			if alias != aliasToDelete {
+				newScripts = append(newScripts, alias)
+			}
+		}
+		m.config.Groups[gi].Scripts = newScripts
+	}
+	m.groups = m.config.Groups
+
 	_ = SaveConfig(m.config)
 
 	m.scripts = append(m.scripts[:idx], m.scripts[idx+1:]...)

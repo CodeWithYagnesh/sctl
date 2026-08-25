@@ -129,6 +129,230 @@ func TestLoadConfigDefault(t *testing.T) {
 	}
 }
 
+func TestLoadConfigWithGroups(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sctl_test_config_groups")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configFilePath := filepath.Join(tmpDir, "config.yaml")
+	os.Setenv("SCTL_CONFIG", configFilePath)
+	defer os.Unsetenv("SCTL_CONFIG")
+
+	configContent := `scripts:
+  - name_alias: test_script
+    description: A test script
+    command: echo hello
+    output_folder_path: ./output/test
+groups:
+  - name: test_group
+    description: A test group
+    pipeline: true
+    scripts:
+      - test_script
+theme:
+  name: default
+`
+	if err := os.WriteFile(configFilePath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+
+	if len(cfg.Groups) != 1 {
+		t.Fatalf("expected 1 group, got %d", len(cfg.Groups))
+	}
+
+	g := cfg.Groups[0]
+	if g.Name != "test_group" {
+		t.Errorf("expected group name 'test_group', got %q", g.Name)
+	}
+	if g.Description != "A test group" {
+		t.Errorf("expected group description 'A test group', got %q", g.Description)
+	}
+	if !g.Pipeline {
+		t.Errorf("expected group pipeline=true")
+	}
+	if len(g.Scripts) != 1 || g.Scripts[0] != "test_script" {
+		t.Errorf("expected group scripts ['test_script'], got %v", g.Scripts)
+	}
+}
+
+func TestSaveConfigWithGroups(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sctl_test_save_groups")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configFilePath := filepath.Join(tmpDir, "config.yaml")
+	os.Setenv("SCTL_CONFIG", configFilePath)
+	defer os.Unsetenv("SCTL_CONFIG")
+
+	cfg := &Config{
+		Scripts: []ScriptConfig{
+			{
+				NameAlias:        "script_a",
+				Description:      "Script A",
+				Command:          "echo a",
+				OutputFolderPath: "./output/a",
+			},
+			{
+				NameAlias:        "script_b",
+				Description:      "Script B",
+				Command:          "echo b",
+				OutputFolderPath: "./output/b",
+			},
+		},
+		Groups: []GroupConfig{
+			{
+				Name:        "my_group",
+				Description: "My test group",
+				Pipeline:    true,
+				Scripts:     []string{"script_a", "script_b"},
+			},
+		},
+	}
+
+	if err := SaveConfig(cfg); err != nil {
+		t.Fatalf("failed to save config: %v", err)
+	}
+
+	data, err := os.ReadFile(configFilePath)
+	if err != nil {
+		t.Fatalf("failed to read saved config: %v", err)
+	}
+
+	content := string(data)
+	if !strings.Contains(content, "groups:") {
+		t.Errorf("expected saved config to contain 'groups:' section")
+	}
+	if !strings.Contains(content, "name: my_group") {
+		t.Errorf("expected saved config to contain group name")
+	}
+	if !strings.Contains(content, "pipeline: true") {
+		t.Errorf("expected saved config to contain pipeline: true")
+	}
+	if !strings.Contains(content, "- script_a") {
+		t.Errorf("expected saved config to contain script_a in group")
+	}
+
+	// Verify round-trip
+	cfg2, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("failed to load saved config: %v", err)
+	}
+	if len(cfg2.Groups) != 1 {
+		t.Fatalf("expected 1 group after round-trip, got %d", len(cfg2.Groups))
+	}
+	if !cfg2.Groups[0].Pipeline {
+		t.Errorf("expected pipeline=true after round-trip")
+	}
+}
+
+func TestDeleteScriptRemovesFromGroups(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sctl_test_delete_group_cleanup")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configFilePath := filepath.Join(tmpDir, "config.yaml")
+	os.Setenv("SCTL_CONFIG", configFilePath)
+	defer os.Unsetenv("SCTL_CONFIG")
+
+	cfg := &Config{
+		Scripts: []ScriptConfig{
+			{NameAlias: "script_a", Command: "echo a", OutputFolderPath: "./output/a"},
+			{NameAlias: "script_b", Command: "echo b", OutputFolderPath: "./output/b"},
+		},
+		Groups: []GroupConfig{
+			{
+				Name:     "group1",
+				Pipeline: true,
+				Scripts:  []string{"script_a", "script_b"},
+			},
+			{
+				Name:     "group2",
+				Pipeline: false,
+				Scripts:  []string{"script_a"},
+			},
+		},
+	}
+	_ = SaveConfig(cfg)
+
+	m := &model{
+		cursor:  0,
+		config:  cfg,
+		scripts: []ScriptState{{Config: cfg.Scripts[0]}, {Config: cfg.Scripts[1]}},
+		groups:  cfg.Groups,
+	}
+
+	m.deleteSelectedScript()
+
+	if len(m.config.Groups[0].Scripts) != 1 || m.config.Groups[0].Scripts[0] != "script_b" {
+		t.Errorf("expected group1 to only have script_b, got %v", m.config.Groups[0].Scripts)
+	}
+	if len(m.config.Groups[1].Scripts) != 0 {
+		t.Errorf("expected group2 to be empty, got %v", m.config.Groups[1].Scripts)
+	}
+}
+
+func TestRenameScriptUpdatesGroupReferences(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sctl_test_rename_group_ref")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configFilePath := filepath.Join(tmpDir, "config.yaml")
+	os.Setenv("SCTL_CONFIG", configFilePath)
+	defer os.Unsetenv("SCTL_CONFIG")
+
+	cfg := &Config{
+		Scripts: []ScriptConfig{
+			{NameAlias: "old_name", Command: "echo old", OutputFolderPath: "./output/old"},
+		},
+		Groups: []GroupConfig{
+			{
+				Name:    "group1",
+				Scripts: []string{"old_name"},
+			},
+		},
+	}
+	_ = SaveConfig(cfg)
+
+	m := &model{
+		cursor:  0,
+		config:  cfg,
+		scripts: []ScriptState{{Config: cfg.Scripts[0]}},
+		groups:  cfg.Groups,
+	}
+
+	// Simulate editing alias from old_name to new_name
+	m.editingAlias = "old_name"
+	m.formInputs = make([]textinput.Model, 6)
+	for i := range m.formInputs {
+		m.formInputs[i] = textinput.New()
+	}
+	m.formInputs[0].SetValue("new_name")
+	m.formInputs[1].SetValue("New description")
+	m.formInputs[2].SetValue("echo new")
+	m.formInputs[3].SetValue("./output/new")
+	m.formInputs[4].SetValue("")
+	m.formInputs[5].SetValue("")
+
+	m.submitForm()
+
+	if len(m.config.Groups[0].Scripts) != 1 || m.config.Groups[0].Scripts[0] != "new_name" {
+		t.Errorf("expected group to reference 'new_name', got %v", m.config.Groups[0].Scripts)
+	}
+}
+
 func TestStartTaskExecution(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "sctl_test_execution")
 	if err != nil {
@@ -363,7 +587,7 @@ func TestSubmitEnvForm(t *testing.T) {
 				},
 			},
 		},
-		envInputs: make([]textinput.Model, 11),
+		envInputs: make([]textinput.Model, 12),
 	}
 
 	for i := range m.envInputs {
@@ -484,5 +708,73 @@ func TestDeleteScript(t *testing.T) {
 	}
 	if m.scripts[0].Config.NameAlias != "hello_1" {
 		t.Errorf("expected remaining script to be hello_1, got %s", m.scripts[0].Config.NameAlias)
+	}
+}
+
+func TestGroupConfigRoundTrip(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sctl_test_group_roundtrip")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configFilePath := filepath.Join(tmpDir, "config.yaml")
+	os.Setenv("SCTL_CONFIG", configFilePath)
+	defer os.Unsetenv("SCTL_CONFIG")
+
+	// Create config with groups
+	cfg := &Config{
+		Scripts: []ScriptConfig{
+			{NameAlias: "s1", Command: "echo 1", OutputFolderPath: "./o1"},
+			{NameAlias: "s2", Command: "echo 2", OutputFolderPath: "./o2"},
+			{NameAlias: "s3", Command: "echo 3", OutputFolderPath: "./o3"},
+		},
+		Groups: []GroupConfig{
+			{
+				Name:        "deploy",
+				Description: "Deploy pipeline",
+				Pipeline:    true,
+				Scripts:     []string{"s1", "s2", "s3"},
+			},
+			{
+				Name:        "check",
+				Description: "Health checks",
+				Pipeline:    false,
+				Scripts:     []string{"s1", "s3"},
+			},
+		},
+	}
+
+	if err := SaveConfig(cfg); err != nil {
+		t.Fatalf("failed to save config: %v", err)
+	}
+
+	// Load and verify
+	cfg2, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+
+	if len(cfg2.Groups) != 2 {
+		t.Fatalf("expected 2 groups, got %d", len(cfg2.Groups))
+	}
+
+	deploy := cfg2.Groups[0]
+	if deploy.Name != "deploy" {
+		t.Errorf("expected name 'deploy', got %q", deploy.Name)
+	}
+	if !deploy.Pipeline {
+		t.Errorf("expected deploy pipeline=true")
+	}
+	if len(deploy.Scripts) != 3 {
+		t.Errorf("expected 3 scripts in deploy group, got %d", len(deploy.Scripts))
+	}
+
+	check := cfg2.Groups[1]
+	if check.Pipeline {
+		t.Errorf("expected check pipeline=false")
+	}
+	if len(check.Scripts) != 2 {
+		t.Errorf("expected 2 scripts in check group, got %d", len(check.Scripts))
 	}
 }
