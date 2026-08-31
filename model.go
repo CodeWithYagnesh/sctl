@@ -520,7 +520,6 @@ func (m *model) stopGroupScripts() {
 	}
 	m.statusMsgTime = time.Now()
 }
-
 func (m *model) updateGroupView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	switch key {
