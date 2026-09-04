@@ -99,6 +99,10 @@ func initialModel() *model {
 	}
 	groupInputs[0].Focus()
 
+	cleanupInput := textinput.New()
+	cleanupInput.Placeholder = "older than days, empty = all"
+	cleanupInput.Width = 30
+
 	m := &model{
 		config:            cfg,
 		scripts:           scripts,
@@ -120,6 +124,7 @@ func initialModel() *model {
 		groupFocusedInput: 0,
 		groupActivePanel:  panelLeft,
 		groupScriptCursor: 0,
+		cleanupInput:      cleanupInput,
 	}
 	m.applyTheme()
 	return m
@@ -305,6 +310,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
+		if m.cleanupMode {
+			return m.updateCleanup(msg)
+		}
+
 		if m.activeView == "form" {
 			return m.updateForm(msg)
 		}
@@ -485,6 +494,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.updateViewport()
 			}
 			return m, nil
+		case "c":
+			m.cleanupMode = true
+			m.cleanupModeAll = true
+			m.cleanupAlias = ""
+			m.cleanupOlderDays = -1
+			m.cleanupInput.SetValue("")
+			m.cleanupInput.Focus()
+			return m, nil
 		case "g":
 			m.activeView = "groups"
 			m.groupCursor = 0
@@ -493,6 +510,46 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func (m *model) updateCleanup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	switch key {
+	case "esc":
+		m.cleanupMode = false
+		return m, nil
+	case "tab":
+		m.cleanupModeAll = !m.cleanupModeAll
+		return m, nil
+	case "enter":
+		older := -1
+		val := strings.TrimSpace(m.cleanupInput.Value())
+		if val != "" {
+			fmt.Sscanf(val, "%d", &older)
+		}
+		alias := ""
+		if !m.cleanupModeAll {
+			alias = m.cleanupAlias
+		}
+		deleted, err := cleanupTasks(m.config, alias, older)
+		if err != nil {
+			m.statusMsg = fmt.Sprintf("Cleanup error: %v", err)
+		} else {
+			m.statusMsg = fmt.Sprintf("Cleanup complete. Deleted %d task file(s).", deleted)
+		}
+		m.statusMsgTime = time.Now()
+		m.cleanupMode = false
+		return m, nil
+	case "a":
+		m.cleanupModeAll = true
+		return m, nil
+	case "s":
+		m.cleanupModeAll = false
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.cleanupInput, cmd = m.cleanupInput.Update(msg)
+	return m, cmd
 }
 
 // ─── Group View Handlers ─────────────────────────────────────────────────────
@@ -520,7 +577,6 @@ func (m *model) stopGroupScripts() {
 	}
 	m.statusMsgTime = time.Now()
 }
-
 func (m *model) updateGroupView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	switch key {

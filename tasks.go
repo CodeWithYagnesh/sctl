@@ -382,3 +382,45 @@ func isValidCron(cronStr string) bool {
 	}
 	return true
 }
+
+func cleanupTasks(cfg *Config, alias string, olderThanDays int) (int, error) {
+	deleted := 0
+	scripts := cfg.Scripts
+	if alias != "" {
+		var filtered []ScriptConfig
+		for _, s := range cfg.Scripts {
+			if s.NameAlias == alias {
+				filtered = append(filtered, s)
+			}
+		}
+		scripts = filtered
+	}
+	cutoff := time.Time{}
+	if olderThanDays >= 0 {
+		cutoff = time.Now().AddDate(0, 0, -olderThanDays)
+	}
+	for _, s := range scripts {
+		dir := s.OutputFolderPath
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if !strings.HasPrefix(e.Name(), "task_") || !strings.HasSuffix(e.Name(), ".yaml") {
+				continue
+			}
+			path := filepath.Join(dir, e.Name())
+			info, err := os.Stat(path)
+			if err != nil {
+				continue
+			}
+			if olderThanDays >= 0 && info.ModTime().After(cutoff) {
+				continue
+			}
+			if err := os.Remove(path); err == nil {
+				deleted++
+			}
+		}
+	}
+	return deleted, nil
+}
