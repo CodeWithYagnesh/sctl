@@ -227,6 +227,21 @@ groups:
 | `--run <script-alias>`, `-run <script-alias>` | Execute the specified script directly in headless mode. |
 | `--run-group <group-name>` | Execute all scripts in a group (pipeline or parallel) in headless mode. |
 
+### Config CLI Commands ⚙️
+
+`sctl` now provides CLI tools for safe config management:
+
+| Command | Description |
+|---|---|
+| `sctl config validate` | Validate `config.yaml` for duplicate aliases, output folders, cron syntax, and group references |
+| `sctl config list` | List all scripts with alias, command and output folder |
+| `sctl config edit <alias>` | Open `config.yaml` in `$EDITOR` |
+| `sctl config set <alias> <field> <value>` | Set a script field `description|command|output_folder_path|cron|notify` with validation |
+| `sctl config export <file>` | Export current config to a YAML file |
+| `sctl config import <file>` | Import config from YAML with validation and automatic backup |
+
+Config saves automatically create timestamped backups `config.yaml.<timestamp>.bak` keeping the last 5 versions.
+
 ### Environment Variables 🌐
 
 | Variable | Description |

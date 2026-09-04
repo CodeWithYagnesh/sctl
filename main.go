@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -244,8 +245,142 @@ func printHelp() {
 	fmt.Println()
 }
 
+func handleConfigCmd(args []string) {
+	if len(args) == 0 {
+		fmt.Println("Usage: sctl config <validate|list|edit|set|export|import> [...]")
+		os.Exit(1)
+	}
+	cmd := args[0]
+	switch cmd {
+	case "validate":
+		cfg, err := LoadConfig()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+			os.Exit(1)
+		}
+		errs := ValidateConfig(cfg)
+		if len(errs) == 0 {
+			fmt.Println("Config validation PASSED")
+			os.Exit(0)
+		}
+		fmt.Println("Config validation FAILED:")
+		for _, e := range errs {
+			fmt.Printf(" - %v\n", e)
+		}
+		os.Exit(1)
+	case "list":
+		cfg, err := LoadConfig()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Scripts:")
+		for _, s := range cfg.Scripts {
+			fmt.Printf(" - %s: %s -> %s\n", s.NameAlias, s.Command, s.OutputFolderPath)
+		}
+	case "edit":
+		if len(args) < 2 {
+			fmt.Println("Usage: sctl config edit <alias>")
+			os.Exit(1)
+		}
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			editor = "vi"
+		}
+		path := GetConfigPath()
+		cmd := exec.Command(editor, path)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "Editor error: %v\n", err)
+			os.Exit(1)
+		}
+	case "set":
+		if len(args) < 4 {
+			fmt.Println("Usage: sctl config set <alias> <field> <value>")
+			os.Exit(1)
+		}
+		alias := args[1]
+		field := args[2]
+		value := args[3]
+		cfg, err := LoadConfig()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+			os.Exit(1)
+		}
+		found := false
+		for i, s := range cfg.Scripts {
+			if s.NameAlias == alias {
+				found = true
+				switch field {
+				case "description":
+					cfg.Scripts[i].Description = value
+				case "command":
+					cfg.Scripts[i].Command = value
+				case "output_folder_path":
+					cfg.Scripts[i].OutputFolderPath = value
+				case "cron":
+					cfg.Scripts[i].Cron = value
+				case "notify":
+					cfg.Scripts[i].Notify = value == "true"
+				default:
+					fmt.Fprintf(os.Stderr, "Unknown field %s\n", field)
+					os.Exit(1)
+				}
+				break
+			}
+		}
+		if !found {
+			fmt.Fprintf(os.Stderr, "Script %s not found\n", alias)
+			os.Exit(1)
+		}
+		if errs := ValidateConfig(cfg); len(errs) > 0 {
+			fmt.Println("Validation failed after set:")
+			for _, e := range errs {
+				fmt.Printf(" - %v\n", e)
+			}
+			os.Exit(1)
+		}
+		if err := SaveConfig(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Config updated")
+	case "export":
+		if len(args) < 2 {
+			fmt.Println("Usage: sctl config export <file>")
+			os.Exit(1)
+		}
+		if err := ExportConfig(args[1]); err != nil {
+			fmt.Fprintf(os.Stderr, "Export error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Config exported to %s\n", args[1])
+	case "import":
+		if len(args) < 2 {
+			fmt.Println("Usage: sctl config import <file>")
+			os.Exit(1)
+		}
+		if err := ImportConfig(args[1]); err != nil {
+			fmt.Fprintf(os.Stderr, "Import error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Config imported from %s\n", args[1])
+	default:
+		fmt.Printf("Unknown config command: %s\n", cmd)
+		os.Exit(1)
+	}
+}
+
+
 func main() {
 	if len(os.Args) != 1 {
+		// config subcommands
+		if len(os.Args) >= 2 && os.Args[1] == "config" {
+			handleConfigCmd(os.Args[2:])
+			os.Exit(0)
+		}
 		// --run <alias>
 		if len(os.Args) >= 3 && (os.Args[1] == "--run" || os.Args[1] == "-run") {
 			alias := os.Args[2]
