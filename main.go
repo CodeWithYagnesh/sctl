@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -245,6 +246,90 @@ func printHelp() {
 	fmt.Println()
 }
 
+func handleCleanupCmd(args []string) {
+	if len(args) == 0 {
+		fmt.Println("Usage: sctl cleanup [--all] [--alias <name>] [--older-than <days>] [--confirm]")
+		fmt.Println("  --all          Delete task_*.yaml files for all scripts")
+		fmt.Println("  --alias <name> Clean only specified script")
+		fmt.Println("  --older-than N Delete files older than N days")
+		os.Exit(1)
+	}
+	cfg, err := LoadConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+	alias := ""
+	var olderThan int = -1
+	confirm := false
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--all":
+			// all scripts will be processed by default
+		case "--alias":
+			if i+1 < len(args) {
+				alias = args[i+1]
+				i++
+			}
+		case "--older-than":
+			if i+1 < len(args) {
+				fmt.Sscanf(args[i+1], "%d", &olderThan)
+				i++
+			}
+		case "--confirm":
+			confirm = true
+		}
+	}
+	if !confirm {
+		fmt.Println("This will delete task files. Use --confirm to proceed.")
+		os.Exit(1)
+	}
+	deleted := 0
+	scripts := cfg.Scripts
+	if alias != "" {
+		var filtered []ScriptConfig
+		for _, s := range cfg.Scripts {
+			if s.NameAlias == alias {
+				filtered = append(filtered, s)
+			}
+		}
+		scripts = filtered
+	}
+	if len(scripts) == 0 {
+		fmt.Println("No scripts matched")
+		os.Exit(0)
+	}
+	cutoff := time.Time{}
+	if olderThan >= 0 {
+		cutoff = time.Now().AddDate(0, 0, -olderThan)
+	}
+	for _, s := range scripts {
+		dir := s.OutputFolderPath
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if !strings.HasPrefix(e.Name(), "task_") || !strings.HasSuffix(e.Name(), ".yaml") {
+				continue
+			}
+			path := filepath.Join(dir, e.Name())
+			info, err := os.Stat(path)
+			if err != nil {
+				continue
+			}
+			if olderThan >= 0 && info.ModTime().After(cutoff) {
+				continue
+			}
+			if err := os.Remove(path); err == nil {
+				deleted++
+				fmt.Printf("Deleted %s\n", path)
+			}
+		}
+	}
+	fmt.Printf("Cleanup complete. Deleted %d task file(s).\n", deleted)
+}
+
 func handleConfigCmd(args []string) {
 	if len(args) == 0 {
 		fmt.Println("Usage: sctl config <validate|list|edit|set|export|import> [...]")
@@ -376,6 +461,11 @@ func handleConfigCmd(args []string) {
 
 func main() {
 	if len(os.Args) != 1 {
+		// cleanup subcommand
+		if len(os.Args) >= 2 && os.Args[1] == "cleanup" {
+			handleCleanupCmd(os.Args[2:])
+			os.Exit(0)
+		}
 		// config subcommands
 		if len(os.Args) >= 2 && os.Args[1] == "config" {
 			handleConfigCmd(os.Args[2:])

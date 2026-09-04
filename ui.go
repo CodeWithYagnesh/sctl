@@ -1414,6 +1414,10 @@ func (m *model) View() string {
 		return "Initializing TUI..."
 	}
 
+	if m.cleanupMode {
+		return m.renderCleanup()
+	}
+
 	if m.activeView == "groups" {
 		return m.renderGroupDashboard()
 	}
@@ -1465,4 +1469,20 @@ func (m *model) View() string {
 
 	panels := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
 	return lipgloss.JoinVertical(lipgloss.Left, header, panels, bottomBar)
+}
+
+func (m *model) renderCleanup() string {
+	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#6366f1")).Render(" Cleanup Task Files ")
+	mode := "All scripts"
+	if !m.cleanupModeAll {
+		mode = "Specific alias"
+	}
+	content := fmt.Sprintf("%s\n\nMode: %s\n\nOlder than days: %s\n\nPress Enter to confirm, Esc to cancel, Tab to toggle mode", title, mode, m.cleanupInput.Value())
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#6366f1")).
+		Padding(1, 2).
+		Width(60).
+		Render(content)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }

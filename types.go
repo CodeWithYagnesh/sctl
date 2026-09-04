@@ -139,6 +139,13 @@ type model struct {
 	groupMemberChecked []bool
 	groupActivePanel  activePanel
 	groupScriptCursor int
+
+	// Cleanup popup state
+	cleanupMode       bool
+	cleanupAlias      string
+	cleanupOlderDays  int
+	cleanupInput      textinput.Model
+	cleanupModeAll    bool
 }
 
 type TaskStartedMsg struct {
