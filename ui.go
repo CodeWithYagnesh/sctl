@@ -8,6 +8,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+var progressCompletedChar = "▮"
+var progressPendingChar = "▯"
+
 func drawProgressBar(width int, percent float64, running bool) string {
 	if width <= 0 {
 		return ""
@@ -26,8 +29,8 @@ func drawProgressBar(width int, percent float64, running bool) string {
 	}
 	emptyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(activeTheme.Idle))
 
-	filled := strings.Repeat("▮", filledLen)
-	empty := strings.Repeat("▯", emptyLen)
+	filled := strings.Repeat(progressCompletedChar, filledLen)
+	empty := strings.Repeat(progressPendingChar, emptyLen)
 	return filledStyle.Render(filled) + emptyStyle.Render(empty)
 }
 func (m *model) renderGroupDetailPanel(width, height int) string {
@@ -36,7 +39,7 @@ func (m *model) renderGroupDetailPanel(width, height int) string {
 		borderStyle = focusedStyle
 	}
 
-	availW := width - 8
+	availW := width - 12
 	if availW < 10 {
 		availW = 10
 	}
@@ -49,10 +52,8 @@ func (m *model) renderGroupDetailPanel(width, height int) string {
 	}
 
 	group := m.groups[m.groupCursor]
-	var s strings.Builder
-	linesUsed := 0
 
-	// Header line
+	// Header
 	groupChip := lipgloss.NewStyle().
 		Background(lipgloss.Color("#1e293b")).
 		Foreground(lipgloss.Color("#e2e8f0")).
@@ -102,53 +103,272 @@ func (m *model) renderGroupDetailPanel(width, height int) string {
 	if sp < 1 {
 		sp = 1
 	}
-	s.WriteString(breadcrumb + strings.Repeat(" ", sp) + headerRight + "\n")
-	linesUsed++
+	topLine := breadcrumb + strings.Repeat(" ", sp) + headerRight
 
-	// Description line (optional)
 	if group.Description != "" {
 		desc := group.Description
 		if len(desc) > availW-4 {
 			desc = desc[:availW-7] + "..."
 		}
-		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Render("   "+desc) + "\n")
-		linesUsed++
+		topLine += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Render("   " + desc)
 	}
 
-	// Divider
 	divider := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e293b")).Render(strings.Repeat("─", availW))
-	s.WriteString(divider + "\n")
-	linesUsed++
+
+	aliasToIdx := make(map[string]int)
+	for i, s := range m.scripts {
+		aliasToIdx[s.Config.NameAlias] = i
+	}
+
+	var cardContent strings.Builder
 
 	if len(group.Scripts) == 0 {
-		s.WriteString("\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Italic(true).
+		cardContent.WriteString("\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Italic(true).
 			Render("  No scripts in this group. Press Enter to add members.") + "\n")
-		linesUsed += 2
-		return borderStyle.Width(width - 4).Height(height - 2).Render(s.String())
+	} else {
+		pipelineHalted := false
+		haltIndex := -1
+		if group.Pipeline {
+			for i, alias := range group.Scripts {
+				if idx, ok := aliasToIdx[alias]; ok {
+					if m.scripts[idx].State == "Failed" || m.scripts[idx].State == "Stopped" {
+						pipelineHalted = true
+						haltIndex = i
+						break
+					}
+				}
+			}
+		}
+
+		for i, alias := range group.Scripts {
+			idx, ok := aliasToIdx[alias]
+			var script ScriptState
+			if ok {
+				script = m.scripts[idx]
+			}
+
+			if i > 0 {
+				if group.Pipeline {
+					prevAlias := group.Scripts[i-1]
+					prevIdx, prevOk := aliasToIdx[prevAlias]
+					connectorColor := "#334155"
+					connectorChar := "│"
+					if prevOk {
+						prevState := m.scripts[prevIdx].State
+						if prevState == "Success" {
+							connectorColor = activeTheme.Success
+						} else if prevState == "Running" {
+							connectorColor = activeTheme.Accent
+							connectorChar = "┃"
+						} else if prevState == "Failed" || prevState == "Stopped" {
+							connectorChar = "✕"
+							connectorColor = activeTheme.Fail
+						}
+					}
+					connector := lipgloss.NewStyle().Foreground(lipgloss.Color(connectorColor)).Bold(true).Render("   " + connectorChar)
+					cardContent.WriteString(connector + "\n")
+				} else {
+					sepLine := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e293b")).Render("   ───")
+					cardContent.WriteString(sepLine + "\n")
+				}
+			}
+
+			isBlocked := false
+			if group.Pipeline && pipelineHalted && haltIndex >= 0 && i > haltIndex {
+				isBlocked = true
+			}
+
+			var badge string
+			switch script.State {
+			case "Running":
+				frame := spinnerFrames[int(time.Now().UnixNano()/200000000)%len(spinnerFrames)]
+				badge = lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.Accent)).Foreground(lipgloss.Color("#ffffff")).Bold(true).Padding(0, 1).Render(" " + frame + " RUNNING ")
+			case "Success":
+				badge = lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.Success)).Foreground(lipgloss.Color("#ffffff")).Bold(true).Padding(0, 1).Render(" ✓ SUCCESS ")
+			case "Failed":
+				badge = lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.Fail)).Foreground(lipgloss.Color("#ffffff")).Bold(true).Padding(0, 1).Render(" ✕ FAILED ")
+			case "Stopped":
+				badge = lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.Stopped)).Foreground(lipgloss.Color("#000000")).Bold(true).Padding(0, 1).Render(" ⊘ STOPPED ")
+			default:
+				if !ok {
+					badge = lipgloss.NewStyle().Background(lipgloss.Color("#1e293b")).Foreground(lipgloss.Color("#f43f5e")).Padding(0, 1).Render("  MISSING  ")
+				} else if isBlocked {
+					badge = lipgloss.NewStyle().Background(lipgloss.Color("#1e293b")).Foreground(lipgloss.Color("#64748b")).Padding(0, 1).Render(" ○ BLOCKED ")
+				} else {
+					badge = lipgloss.NewStyle().Background(lipgloss.Color("#1e293b")).Foreground(lipgloss.Color("#9ca3af")).Padding(0, 1).Render("   IDLE    ")
+				}
+			}
+
+			seqNum := lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render(fmt.Sprintf("%d.", i+1))
+			nameStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e2e8f0"))
+			if !ok {
+				nameStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#f43f5e"))
+			} else if isBlocked {
+				nameStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#475569"))
+			}
+			name := nameStyle.Render(alias)
+
+			row1 := " " + seqNum + " " + name
+			r1sp := availW - lipgloss.Width(row1) - lipgloss.Width(badge) - 2
+			if r1sp < 1 {
+				r1sp = 1
+			}
+			row1 += strings.Repeat(" ", r1sp) + badge
+
+			barW := availW - 14
+			if barW < 4 {
+				barW = 4
+			}
+			progress := 0
+			if ok {
+				progress = script.Progress
+			}
+			var pBar string
+			if !ok || isBlocked {
+				pBar = lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render(strings.Repeat("▯", barW))
+			} else {
+				pBar = drawProgressBar(barW, float64(progress)/100.0, script.State == "Running")
+			}
+			pctLabel := lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Render(fmt.Sprintf(" %3d%%", progress))
+			if script.State == "Idle" || !ok || isBlocked {
+				pctLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render("  --")
+			}
+			row2 := "     " + pBar + pctLabel
+
+			row3 := ""
+			if ok && !isBlocked {
+				if script.State == "Running" && !script.StartedAt.IsZero() {
+					elapsed := time.Since(script.StartedAt).Round(time.Second)
+					row3 = "     " + lipgloss.NewStyle().Foreground(lipgloss.Color(activeTheme.Accent)).Render(fmt.Sprintf("⏱ %s", formatDuration(elapsed)))
+				} else if (script.State == "Success" || script.State == "Failed" || script.State == "Stopped") && !script.StartedAt.IsZero() && !script.FinishedAt.IsZero() {
+					dur := script.FinishedAt.Sub(script.StartedAt).Round(time.Second)
+					startStr := script.StartedAt.Format("15:04:05")
+					row3 = "     " + lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Render(fmt.Sprintf("%s  →  %s", startStr, formatDuration(dur)))
+				}
+			}
+
+			row4 := ""
+			if ok && script.State == "Running" && script.Logs != "" {
+				logLines := strings.Split(script.Logs, "\n")
+				lastLine := ""
+				for j := len(logLines) - 1; j >= 0; j-- {
+					if strings.TrimSpace(logLines[j]) != "" {
+						lastLine = strings.TrimSpace(logLines[j])
+						break
+					}
+				}
+				if lastLine != "" {
+					previewW := availW - 10
+					if len(lastLine) > previewW {
+						lastLine = lastLine[:previewW-3] + "..."
+					}
+					row4 = "     " + lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Italic(true).Render("› " + lastLine)
+				}
+			}
+
+			cardBorderColor := activeTheme.Idle
+			if m.groupActivePanel == panelRight && m.groupScriptCursor == i {
+				cardBorderColor = activeTheme.Accent
+			} else if ok {
+				switch script.State {
+				case "Running":
+					cardBorderColor = activeTheme.Accent
+				case "Success":
+					cardBorderColor = activeTheme.Success
+				case "Failed", "Stopped":
+					cardBorderColor = activeTheme.Fail
+				}
+			}
+
+			cardStyle := lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color(cardBorderColor)).
+				Padding(0, 1).
+				Width(availW - 2)
+
+			cardContentStr := row1 + "\n" + row2
+			if row3 != "" {
+				cardContentStr += "\n" + row3
+			}
+			if row4 != "" {
+				cardContentStr += "\n" + row4
+			}
+			cardContent.WriteString(cardStyle.Render(cardContentStr) + "\n")
+		}
+
+		if pipelineHalted {
+			haltMsg := lipgloss.NewStyle().
+				Background(lipgloss.Color("#1e293b")).
+				Foreground(lipgloss.Color("#f43f5e")).
+				Bold(true).Padding(0, 1).
+				Render("⛔ PIPELINE HALTED")
+			haltDetail := lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Render("Downstream steps blocked")
+			cardContent.WriteString("\n  " + haltMsg + "  " + haltDetail + "\n")
+		}
 	}
 
-	// Pipeline visualization
-	vizLines := m.renderPipelineViz(group, availW)
-	for _, line := range vizLines {
-		s.WriteString(line + "\n")
+	// Setup viewport for cards
+	headerLines := 2
+	logSectionHeight := 4
+	vpHeight := height - 2 - headerLines - 1 - logSectionHeight
+	if vpHeight < 3 {
+		vpHeight = 3
 	}
-	linesUsed += len(vizLines)
+	m.groupViewport.Width = availW
+	m.groupViewport.Height = vpHeight
+	m.groupViewport.SetContent(cardContent.String())
 
-	// Divider
-	s.WriteString(divider + "\n")
-	linesUsed++
+	// Build log preview
+	logPreview := m.renderGroupLogPreview(availW, group, aliasToIdx)
 
-	// Script status list — strictly fit remaining height
-	remainingLines := (height - 2) - linesUsed - 1 // -1 for safety padding
-	if remainingLines < 3 {
-		remainingLines = 3
+	logDivider := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e293b")).Render(strings.Repeat("─", availW))
+
+	fullContent := topLine + "\n" + divider + "\n" + m.groupViewport.View() + "\n" + logDivider + "\n" + logPreview
+
+	return borderStyle.Width(width - 4).Height(height - 2).Render(fullContent)
+}
+
+func (m *model) renderGroupLogPreview(availW int, group GroupConfig, aliasToIdx map[string]int) string {
+	var sb strings.Builder
+	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#6366f1")).Render("  LOG PREVIEW")
+	sb.WriteString(title)
+	sb.WriteString("\n")
+
+	if len(group.Scripts) == 0 {
+		sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Italic(true).Render("   No scripts in group"))
+		return sb.String()
 	}
-	scriptLines := m.renderGroupScriptStatuses(group, availW, remainingLines)
-	for _, line := range scriptLines {
-		s.WriteString(line + "\n")
-	}
 
-	return borderStyle.Width(width - 4).Height(height - 2).Render(s.String())
+	for _, alias := range group.Scripts {
+		idx, ok := aliasToIdx[alias]
+		if !ok {
+			sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#f43f5e")).Render(fmt.Sprintf("   %s: MISSING", alias)))
+			sb.WriteString("\n")
+			continue
+		}
+		script := m.scripts[idx]
+		lastLine := ""
+		if script.Logs != "" {
+			logLines := strings.Split(script.Logs, "\n")
+			for j := len(logLines) - 1; j >= 0; j-- {
+				if strings.TrimSpace(logLines[j]) != "" {
+					lastLine = strings.TrimSpace(logLines[j])
+					break
+				}
+			}
+		}
+		if lastLine == "" {
+			lastLine = "— no output —"
+		}
+		previewW := availW - 12
+		if len(lastLine) > previewW {
+			lastLine = lastLine[:previewW-3] + "..."
+		}
+		aliasStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#94a3b8")).Render(alias + ":")
+		logStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Italic(true).Render(lastLine)
+		sb.WriteString("   " + aliasStyle + " " + logStyle + "\n")
+	}
+	return sb.String()
 }
 
 func (m *model) renderPipelineViz(group GroupConfig, availW int) []string {
@@ -547,7 +767,12 @@ func (m *model) renderLeftPanel(width, height int) string {
 		if barW < 4 {
 			barW = 4
 		}
-		pBar := drawProgressBar(barW, float64(script.Progress)/100.0, script.State == "Running")
+		var pBar string
+		if script.State != "Idle" {
+			pBar = drawProgressBar(barW, float64(script.Progress)/100.0, script.State == "Running")
+		} else {
+			pBar = ""
+		}
 		pctLabel := lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Render(fmt.Sprintf(" %3d%%", script.Progress))
 		if script.State == "Idle" {
 			pctLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render("  --")
@@ -579,6 +804,8 @@ func (m *model) renderLeftPanel(width, height int) string {
 		cardBorderColor := lipgloss.Color(activeTheme.Idle)
 		if isSelected {
 			cardBorderColor = lipgloss.Color(activeTheme.Accent)
+		} else if script.State == "Success" {
+			cardBorderColor = lipgloss.Color(activeTheme.Success)
 		}
 		cardStyle := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -671,11 +898,19 @@ func (m *model) renderBottomBar(width int) string {
 	border := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e293b")).Render(strings.Repeat("─", width))
 
 	type binding struct{ key, desc string }
-	bindings := []binding{
-		{"R", "Run"}, {"S", "Stop"}, {"Space", "Select"},
-		{"A", "Add"}, {"E", "Edit"}, {"Enter", "Env/Cron"}, {"D", "Delete"},
-		{"/", "Filter"}, {"H", "History"}, {"P", "Parallel"}, {"O", "HTML"},
-		{"T", "Theme"}, {"G", "Groups"}, {"C-↑/↓", "Reorder"}, {"Tab", "Switch"}, {"Q", "Quit"},
+	var bindings []binding
+	if m.activePanel == panelLeft {
+		bindings = []binding{
+			{"R", "Run"}, {"S", "Stop"}, {"Space", "Select"},
+			{"A", "Add"}, {"E", "Edit"}, {"D", "Delete"},
+			{"/", "Filter"}, {"H", "History"}, {"P", "Parallel"}, {"G", "Groups"},
+			{"Tab", "Switch"}, {"Q", "Quit"},
+		}
+	} else {
+		bindings = []binding{
+			{"[", "PgUp"}, {"]", "PgDn"}, {"O", "HTML"},
+			{"T", "Theme"}, {"C", "CopyLog"}, {"Tab", "Switch"}, {"Q", "Quit"},
+		}
 	}
 	kStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color("#1e293b")).
@@ -747,6 +982,7 @@ func (m *model) renderForm() string {
 		"Output folder path",
 		"Cron schedule  (optional, e.g. */5 * * * *)",
 		"SSH host  (optional, e.g. user@server — blank = run locally)",
+		"Timeout  (optional, e.g. 10m)",
 	}
 
 	for i, input := range m.formInputs {
@@ -816,9 +1052,9 @@ func (m *model) renderEnvForm() string {
 	}
 	inner = append(inner, "")
 
-	inner = append(inner, labelStyle.Render("Environment variables  (up to 5 key=value pairs)"))
+	inner = append(inner, labelStyle.Render("Environment variables  (up to 10 key=value pairs)"))
 	inner = append(inner, "")
-	for i := 1; i < 11; i += 2 {
+	for i := 1; i < 21; i += 2 {
 		pairNum := (i / 2) + 1
 		inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render(fmt.Sprintf("Pair %d", pairNum)))
 
@@ -844,10 +1080,10 @@ func (m *model) renderEnvForm() string {
 
 	inner = append(inner, labelStyle.Render("Desktop notification on complete  (y / n)"))
 	notifyBorder := blurBorder
-	if m.focusedEnv == 11 {
+	if m.focusedEnv == 21 {
 		notifyBorder = focusedBorder
 	}
-	styledNotify := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(notifyBorder).Width(10).Render(m.envInputs[11].View())
+	styledNotify := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(notifyBorder).Width(10).Render(m.envInputs[21].View())
 	for _, l := range strings.Split(styledNotify, "\n") {
 		if l != "" {
 			inner = append(inner, l)
@@ -857,10 +1093,10 @@ func (m *model) renderEnvForm() string {
 
 	saveBg := lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.Idle)).Foreground(lipgloss.Color("#475569")).Padding(0, 2).Render("Save")
 	cancelBg := lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.Idle)).Foreground(lipgloss.Color("#475569")).Padding(0, 2).Render("Cancel")
-	if m.focusedEnv == 12 {
+	if m.focusedEnv == 22 {
 		saveBg = lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.Accent)).Foreground(lipgloss.Color("#ffffff")).Bold(true).Padding(0, 2).Render("Save")
 	}
-	if m.focusedEnv == 13 {
+	if m.focusedEnv == 23 {
 		cancelBg = lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.Fail)).Foreground(lipgloss.Color("#ffffff")).Bold(true).Padding(0, 2).Render("Cancel")
 	}
 	inner = append(inner, lipgloss.NewStyle().Foreground(lipgloss.Color("#334155")).Render("─────────────────────────────────────────────────────"))
@@ -1414,10 +1650,12 @@ func (m *model) View() string {
 		return "Initializing TUI..."
 	}
 
+	if m.settingsMode {
+		return m.renderSettings()
+	}
 	if m.cleanupMode {
 		return m.renderCleanup()
 	}
-
 	if m.activeView == "groups" {
 		return m.renderGroupDashboard()
 	}
@@ -1430,7 +1668,6 @@ func (m *model) View() string {
 	if m.activeView == "group_delete_confirm" {
 		return m.renderGroupDeleteConfirm()
 	}
-
 	if m.activeView == "form" {
 		return m.renderForm()
 	}
@@ -1469,6 +1706,20 @@ func (m *model) View() string {
 
 	panels := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
 	return lipgloss.JoinVertical(lipgloss.Left, header, panels, bottomBar)
+}
+
+func (m *model) renderSettings() string {
+	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#6366f1")).Render(" Progress Bar Settings ")
+	completed := m.settingsInputs[0].View()
+	pending := m.settingsInputs[1].View()
+	content := fmt.Sprintf("%s\n\nCompleted char:\n%s\n\nPending char:\n%s\n\nPress Enter to save, Esc to cancel, Tab to switch", title, completed, pending)
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#6366f1")).
+		Padding(1, 2).
+		Width(60).
+		Render(content)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }
 
 func (m *model) renderCleanup() string {

@@ -116,7 +116,7 @@ func writeTaskFile(folderPath string, taskID int, nameAlias string, state string
 	return os.WriteFile(filename, data, 0644)
 }
 
-func StartTask(nameAlias string, command string, folderPath string, input map[string]interface{}) (*exec.Cmd, int, error) {
+func StartTask(nameAlias string, command string, folderPath string, input map[string]interface{}, timeoutStr string) (*exec.Cmd, int, error) {
 	taskID := getNextTaskID(folderPath)
 	cmd := exec.Command("bash", "-c", command)
 	prepareCmd(cmd)
@@ -253,6 +253,15 @@ func StartTask(nameAlias string, command string, folderPath string, input map[st
 		w.Close()
 		r.Close()
 		return nil, 0, err
+	}
+
+	if timeoutStr != "" {
+		if d, err := time.ParseDuration(timeoutStr); err == nil && d > 0 {
+			go func() {
+				time.Sleep(d)
+				_ = StopTask(cmd)
+			}()
+		}
 	}
 
 	go func() {
