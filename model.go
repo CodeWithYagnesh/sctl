@@ -1517,7 +1517,7 @@ func (m *model) submitEnvForm() {
 			inputsMap[k] = v
 		}
 	}
-	for i := 1; i < 21; i += 2 {
+	for i := 1; i < 21 && i+1 < len(m.envInputs); i += 2 {
 		k := strings.TrimSpace(m.envInputs[i].Value())
 		v := strings.TrimSpace(m.envInputs[i+1].Value())
 		if k != "" {
