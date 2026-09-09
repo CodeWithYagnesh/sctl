@@ -51,7 +51,7 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 	cfg.Theme = normalizeTheme(cfg.Theme)
-	_ = SyncCrontab(&cfg)
+	cfg.ProgressBar = normalizeProgressBar(cfg.ProgressBar)
 	return &cfg, nil
 }
 
@@ -78,8 +78,19 @@ func backupConfig(path string) error {
 	return nil
 }
 
+func normalizeProgressBar(pb ProgressBarConfig) ProgressBarConfig {
+	if pb.Completed == "" {
+		pb.Completed = "▮"
+	}
+	if pb.Pending == "" {
+		pb.Pending = "▯"
+	}
+	return pb
+}
+
 func SaveConfig(cfg *Config) error {
 	cfg.Theme = normalizeTheme(cfg.Theme)
+	cfg.ProgressBar = normalizeProgressBar(cfg.ProgressBar)
 	path := GetConfigPath()
 	dir := filepath.Dir(path)
 	if dir != "." && dir != "" {

@@ -335,7 +335,7 @@ func TestRenameScriptUpdatesGroupReferences(t *testing.T) {
 
 	// Simulate editing alias from old_name to new_name
 	m.editingAlias = "old_name"
-	m.formInputs = make([]textinput.Model, 6)
+	m.formInputs = make([]textinput.Model, 7)
 	for i := range m.formInputs {
 		m.formInputs[i] = textinput.New()
 	}
@@ -345,6 +345,7 @@ func TestRenameScriptUpdatesGroupReferences(t *testing.T) {
 	m.formInputs[3].SetValue("./output/new")
 	m.formInputs[4].SetValue("")
 	m.formInputs[5].SetValue("")
+	m.formInputs[6].SetValue("")
 
 	m.submitForm()
 
@@ -363,7 +364,7 @@ func TestStartTaskExecution(t *testing.T) {
 	// Command outputting logs and progress markers
 	command := `echo "starting job"; echo "__PROGRESS__:30"; echo "working hard"; echo "__PROGRESS__:80"; echo "done!"`
 
-	_, taskID, err := StartTask("test_run", command, tmpDir, nil)
+	_, taskID, err := StartTask("test_run", command, tmpDir, nil, "")
 	if err != nil {
 		t.Fatalf("failed to start task: %v", err)
 	}
@@ -508,7 +509,7 @@ func TestStartTaskWithEnv(t *testing.T) {
 		"something_env": "something value",
 	}
 
-	_, taskID, err := StartTask("test_run_env", command, tmpDir, input)
+	_, taskID, err := StartTask("test_run_env", command, tmpDir, input, "")
 	if err != nil {
 		t.Fatalf("failed to start task: %v", err)
 	}

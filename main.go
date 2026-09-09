@@ -32,7 +32,7 @@ func runHeadless(alias string) error {
 		return fmt.Errorf("script alias %q not found", alias)
 	}
 
-	cmd, taskID, err := StartTask(target.NameAlias, target.Command, target.OutputFolderPath, target.Input)
+	cmd, taskID, err := StartTask(target.NameAlias, target.Command, target.OutputFolderPath, target.Input, target.Timeout)
 	if err != nil {
 		return fmt.Errorf("failed to start task: %v", err)
 	}

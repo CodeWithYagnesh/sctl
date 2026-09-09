@@ -33,6 +33,7 @@ type ScriptConfig struct {
 	Cron             string                 `yaml:"cron,omitempty"`
 	Notify           bool                   `yaml:"notify,omitempty"`
 	Host             string                 `yaml:"host,omitempty"`
+	Timeout          string                 `yaml:"timeout,omitempty"`
 }
 
 // GroupConfig defines a collection of scripts that can be run together.
@@ -54,10 +55,16 @@ type ThemeConfig struct {
 	Idle    string `yaml:"idle,omitempty"`
 }
 
+type ProgressBarConfig struct {
+	Completed string `yaml:"completed,omitempty"`
+	Pending   string `yaml:"pending,omitempty"`
+}
+
 type Config struct {
-	Scripts []ScriptConfig `yaml:"scripts"`
-	Groups  []GroupConfig  `yaml:"groups,omitempty"`
-	Theme   ThemeConfig    `yaml:"theme,omitempty"`
+	Scripts     []ScriptConfig    `yaml:"scripts"`
+	Groups      []GroupConfig     `yaml:"groups,omitempty"`
+	Theme       ThemeConfig       `yaml:"theme,omitempty"`
+	ProgressBar ProgressBarConfig `yaml:"progressbar,omitempty"`
 }
 
 type TaskYAML struct {
@@ -139,6 +146,8 @@ type model struct {
 	groupMemberChecked []bool
 	groupActivePanel  activePanel
 	groupScriptCursor int
+	groupDetailScroll  int
+	groupViewport      viewport.Model
 
 	// Cleanup popup state
 	cleanupMode       bool
@@ -146,6 +155,10 @@ type model struct {
 	cleanupOlderDays  int
 	cleanupInput      textinput.Model
 	cleanupModeAll    bool
+
+	// Settings popup state
+	settingsMode      bool
+	settingsInputs    []textinput.Model
 }
 
 type TaskStartedMsg struct {

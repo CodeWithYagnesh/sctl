@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/atotto/clipboard"
 	"gopkg.in/yaml.v3"
 )
 
@@ -59,8 +60,10 @@ func initialModel() *model {
 
 	cfg.Theme = normalizeTheme(cfg.Theme)
 	activeTheme = cfg.Theme
+	progressCompletedChar = cfg.ProgressBar.Completed
+	progressPendingChar = cfg.ProgressBar.Pending
 
-	inputs := make([]textinput.Model, 6)
+	inputs := make([]textinput.Model, 7)
 	for i := range inputs {
 		t := textinput.New()
 		t.Width = 40
@@ -77,6 +80,8 @@ func initialModel() *model {
 			t.Placeholder = "e.g., */5 * * * * (optional)"
 		case 5:
 			t.Placeholder = "e.g., user@192.168.1.1 (optional, blank = local)"
+		case 6:
+			t.Placeholder = "e.g., 10m (optional)"
 		}
 		inputs[i] = t
 	}
@@ -124,6 +129,7 @@ func initialModel() *model {
 		groupFocusedInput: 0,
 		groupActivePanel:  panelLeft,
 		groupScriptCursor: 0,
+		groupViewport:     viewport.New(0, 0),
 		cleanupInput:      cleanupInput,
 	}
 	m.applyTheme()
@@ -211,6 +217,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.viewport.Width = vWidth
 		m.updateViewport()
+		m.groupViewport.Width = int(float64(m.width) * 0.62) - 12
 
 	case TaskStartedMsg:
 		for i := range m.scripts {
@@ -312,6 +319,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.cleanupMode {
 			return m.updateCleanup(msg)
+		}
+		if m.settingsMode {
+			return m.updateSettings(msg)
 		}
 
 		if m.activeView == "form" {
@@ -418,6 +428,20 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filterInput = fi
 			m.activeView = "filter"
 			return m, nil
+		case "?":
+			m.settingsMode = true
+			if m.settingsInputs == nil {
+				m.settingsInputs = make([]textinput.Model, 2)
+				for i := range m.settingsInputs {
+					ti := textinput.New()
+					ti.Width = 20
+					m.settingsInputs[i] = ti
+				}
+			}
+			m.settingsInputs[0].SetValue(m.config.ProgressBar.Completed)
+			m.settingsInputs[1].SetValue(m.config.ProgressBar.Pending)
+			m.settingsInputs[0].Focus()
+			return m, nil
 		case "o":
 			m.openHTMLOutput()
 			return m, nil
@@ -495,6 +519,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "c":
+			if m.activePanel == panelRight && len(m.scripts) > 0 {
+				logs := m.scripts[m.cursor].Logs
+				if logs != "" {
+					clipboard.WriteAll(logs)
+					m.statusMsg = "Log copied to clipboard"
+				} else {
+					m.statusMsg = "No logs to copy"
+				}
+				m.statusMsgTime = time.Now()
+				return m, nil
+			}
 			m.cleanupMode = true
 			m.cleanupModeAll = true
 			m.cleanupAlias = ""
@@ -552,6 +587,43 @@ func (m *model) updateCleanup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m *model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	switch key {
+	case "esc":
+		m.settingsMode = false
+		return m, nil
+	case "tab":
+		if len(m.settingsInputs) >= 2 {
+			if m.settingsInputs[0].Focused() {
+				m.settingsInputs[0].Blur()
+				m.settingsInputs[1].Focus()
+			} else {
+				m.settingsInputs[1].Blur()
+				m.settingsInputs[0].Focus()
+			}
+		}
+		return m, nil
+	case "enter":
+		m.config.ProgressBar.Completed = m.settingsInputs[0].Value()
+		m.config.ProgressBar.Pending = m.settingsInputs[1].Value()
+		progressCompletedChar = m.config.ProgressBar.Completed
+		progressPendingChar = m.config.ProgressBar.Pending
+		_ = SaveConfig(m.config)
+		m.statusMsg = "Progress bar settings saved"
+		m.statusMsgTime = time.Now()
+		m.settingsMode = false
+		return m, nil
+	}
+	var cmds []tea.Cmd
+	for i := range m.settingsInputs {
+		var cmd tea.Cmd
+		m.settingsInputs[i], cmd = m.settingsInputs[i].Update(msg)
+		cmds = append(cmds, cmd)
+	}
+	return m, tea.Batch(cmds...)
+}
+
 // ─── Group View Handlers ─────────────────────────────────────────────────────
 
 func (m *model) stopGroupScripts() {
@@ -605,9 +677,7 @@ func (m *model) updateGroupView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.groupScriptCursor = 0
 			}
 		} else {
-			if m.groupCursor < len(m.groups) && m.groupScriptCursor > 0 {
-				m.groupScriptCursor--
-			}
+			m.groupViewport.LineUp(1)
 		}
 		return m, nil
 	case "down", "j":
@@ -617,13 +687,14 @@ func (m *model) updateGroupView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.groupScriptCursor = 0
 			}
 		} else {
-			if m.groupCursor < len(m.groups) {
-				group := m.groups[m.groupCursor]
-				if m.groupScriptCursor < len(group.Scripts)-1 {
-					m.groupScriptCursor++
-				}
-			}
+			m.groupViewport.LineDown(1)
 		}
+		return m, nil
+	case "pgup", "[":
+		m.groupViewport.LineUp(3)
+		return m, nil
+	case "pgdn", "]":
+		m.groupViewport.LineDown(3)
 		return m, nil
 	case "a":
 		if m.groupActivePanel == panelLeft {
@@ -666,6 +737,9 @@ func (m *model) updateGroupView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case "s":
 		m.stopGroupScripts()
+		return m, nil
+	case "o":
+		m.openGroupHTMLOutputs()
 		return m, nil
 	}
 	return m, nil
@@ -1060,12 +1134,12 @@ func (m *model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.activeView = "main"
 		return m, nil
 	case "tab", "down":
-		if m.focusedInput < 7 {
-			if m.focusedInput < 6 {
+		if m.focusedInput < 8 {
+			if m.focusedInput < 7 {
 				m.formInputs[m.focusedInput].Blur()
 			}
 			m.focusedInput++
-			if m.focusedInput < 6 {
+			if m.focusedInput < 7 {
 				m.formInputs[m.focusedInput].Focus()
 			}
 		} else {
@@ -1075,35 +1149,35 @@ func (m *model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "shift+tab", "up":
 		if m.focusedInput > 0 {
-			if m.focusedInput < 6 {
+			if m.focusedInput < 7 {
 				m.formInputs[m.focusedInput].Blur()
 			}
 			m.focusedInput--
-			if m.focusedInput < 6 {
+			if m.focusedInput < 7 {
 				m.formInputs[m.focusedInput].Focus()
 			}
 		} else {
-			if m.focusedInput < 6 {
+			if m.focusedInput < 7 {
 				m.formInputs[m.focusedInput].Blur()
 			}
-			m.focusedInput = 7
+			m.focusedInput = 8
 		}
 		return m, nil
 	case "enter":
-		if m.focusedInput == 6 {
+		if m.focusedInput == 7 {
 			m.submitForm()
-		} else if m.focusedInput == 7 {
+		} else if m.focusedInput == 8 {
 			m.activeView = "main"
 		} else {
 			m.formInputs[m.focusedInput].Blur()
 			m.focusedInput++
-			if m.focusedInput < 6 {
+			if m.focusedInput < 7 {
 				m.formInputs[m.focusedInput].Focus()
 			}
 		}
 		return m, nil
 	}
-	if m.focusedInput < 6 {
+	if m.focusedInput < 7 {
 		var cmd tea.Cmd
 		m.formInputs[m.focusedInput], cmd = m.formInputs[m.focusedInput].Update(msg)
 		return m, cmd
@@ -1163,6 +1237,7 @@ func (m *model) submitForm() {
 	outputPath := strings.TrimSpace(m.formInputs[3].Value())
 	cronStr := strings.TrimSpace(m.formInputs[4].Value())
 	hostStr := strings.TrimSpace(m.formInputs[5].Value())
+	timeoutStr := strings.TrimSpace(m.formInputs[6].Value())
 
 	if alias == "" || cmdStr == "" || outputPath == "" {
 		m.statusMsg = "Error: Name, Command, and Output Path are required."
@@ -1174,6 +1249,25 @@ func (m *model) submitForm() {
 		m.statusMsgTime = time.Now()
 		return
 	}
+	if timeoutStr != "" {
+		if _, err := time.ParseDuration(timeoutStr); err != nil {
+			m.statusMsg = "Error: invalid timeout format. Use e.g. 10m or 30s."
+			m.statusMsgTime = time.Now()
+			return
+		}
+	}
+	if err := os.MkdirAll(outputPath, 0755); err != nil {
+		m.statusMsg = fmt.Sprintf("Error: cannot create output folder: %v", err)
+		m.statusMsgTime = time.Now()
+		return
+	}
+	testFile := filepath.Join(outputPath, ".sctl_write_test")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		m.statusMsg = fmt.Sprintf("Error: output folder is not writable: %v", err)
+		m.statusMsgTime = time.Now()
+		return
+	}
+	os.Remove(testFile)
 
 	if m.editingAlias != "" {
 		if alias != m.editingAlias {
@@ -1200,10 +1294,14 @@ func (m *model) submitForm() {
 			OutputFolderPath: outputPath,
 			Cron:             cronStr,
 			Host:             hostStr,
+			Timeout:          timeoutStr,
 		}
 		for ci, sc := range m.config.Scripts {
 			if sc.NameAlias == m.editingAlias {
 				updatedConfig.Input = sc.Input
+				if timeoutStr == "" {
+					updatedConfig.Timeout = sc.Timeout
+				}
 				m.config.Scripts[ci] = updatedConfig
 				break
 			}
@@ -1242,6 +1340,7 @@ func (m *model) submitForm() {
 		OutputFolderPath: outputPath,
 		Cron:             cronStr,
 		Host:             hostStr,
+		Timeout:          timeoutStr,
 	}
 
 	m.config.Scripts = append(m.config.Scripts, newConfig)
@@ -1272,12 +1371,12 @@ func (m *model) updateEnvForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.activeView = "main"
 		return m, nil
 	case "tab", "down":
-		if m.focusedEnv < 13 {
-			if m.focusedEnv < 12 {
+		if m.focusedEnv < 24 {
+			if m.focusedEnv < 22 {
 				m.envInputs[m.focusedEnv].Blur()
 			}
 			m.focusedEnv++
-			if m.focusedEnv < 12 {
+			if m.focusedEnv < 22 {
 				m.envInputs[m.focusedEnv].Focus()
 			}
 		} else {
@@ -1287,35 +1386,35 @@ func (m *model) updateEnvForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "shift+tab", "up":
 		if m.focusedEnv > 0 {
-			if m.focusedEnv < 12 {
+			if m.focusedEnv < 22 {
 				m.envInputs[m.focusedEnv].Blur()
 			}
 			m.focusedEnv--
-			if m.focusedEnv < 12 {
+			if m.focusedEnv < 22 {
 				m.envInputs[m.focusedEnv].Focus()
 			}
 		} else {
-			if m.focusedEnv < 12 {
+			if m.focusedEnv < 22 {
 				m.envInputs[m.focusedEnv].Blur()
 			}
-			m.focusedEnv = 13
+			m.focusedEnv = 23
 		}
 		return m, nil
 	case "enter":
-		if m.focusedEnv == 12 {
+		if m.focusedEnv == 22 {
 			m.submitEnvForm()
-		} else if m.focusedEnv == 13 {
+		} else if m.focusedEnv == 23 {
 			m.activeView = "main"
 		} else {
 			m.envInputs[m.focusedEnv].Blur()
 			m.focusedEnv++
-			if m.focusedEnv < 12 {
+			if m.focusedEnv < 22 {
 				m.envInputs[m.focusedEnv].Focus()
 			}
 		}
 		return m, nil
 	}
-	if m.focusedEnv < 12 {
+	if m.focusedEnv < 22 {
 		var cmd tea.Cmd
 		m.envInputs[m.focusedEnv], cmd = m.envInputs[m.focusedEnv].Update(msg)
 		return m, cmd
@@ -1348,22 +1447,22 @@ func (m *model) updateDeleteConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) initEnvForm() {
-	m.envInputs = make([]textinput.Model, 12)
+	m.envInputs = make([]textinput.Model, 22)
 	for i := range m.envInputs {
 		m.envInputs[i] = textinput.New()
 		m.envInputs[i].CharLimit = 100
 		m.envInputs[i].Width = 40
 	}
 	m.envInputs[0].Placeholder = "e.g., */5 * * * *"
-	m.envInputs[11].Placeholder = "y / n"
-	m.envInputs[11].CharLimit = 1
+	m.envInputs[21].Placeholder = "y / n"
+	m.envInputs[21].CharLimit = 1
 
 	focusedScript := m.scripts[m.cursor]
 	m.envInputs[0].SetValue(focusedScript.Config.Cron)
 	if focusedScript.Config.Notify {
-		m.envInputs[11].SetValue("y")
+		m.envInputs[21].SetValue("y")
 	} else {
-		m.envInputs[11].SetValue("n")
+		m.envInputs[21].SetValue("n")
 	}
 
 	keys := make([]string, 0, len(focusedScript.Config.Input))
@@ -1374,14 +1473,14 @@ func (m *model) initEnvForm() {
 
 	idx := 1
 	for _, k := range keys {
-		if idx >= 11 {
+		if idx >= 21 {
 			break
 		}
 		m.envInputs[idx].SetValue(k)
 		m.envInputs[idx+1].SetValue(fmt.Sprintf("%v", focusedScript.Config.Input[k]))
 		idx += 2
 	}
-	for i := 1; i < 11; i += 2 {
+	for i := 1; i < 21; i += 2 {
 		m.envInputs[i].Placeholder = fmt.Sprintf("Key %d", (i/2)+1)
 		m.envInputs[i+1].Placeholder = fmt.Sprintf("Value %d", (i/2)+1)
 	}
@@ -1394,8 +1493,8 @@ func (m *model) submitEnvForm() {
 	cronVal := strings.TrimSpace(m.envInputs[0].Value())
 	focusedScript.Config.Cron = cronVal
 
-	if len(m.envInputs) > 11 {
-		notifyVal := strings.ToLower(strings.TrimSpace(m.envInputs[11].Value()))
+	if len(m.envInputs) > 21 {
+		notifyVal := strings.ToLower(strings.TrimSpace(m.envInputs[21].Value()))
 		focusedScript.Config.Notify = notifyVal == "y" || notifyVal == "yes"
 	}
 
@@ -1418,7 +1517,7 @@ func (m *model) submitEnvForm() {
 			inputsMap[k] = v
 		}
 	}
-	for i := 1; i < 11; i += 2 {
+	for i := 1; i < 21; i += 2 {
 		k := strings.TrimSpace(m.envInputs[i].Value())
 		v := strings.TrimSpace(m.envInputs[i+1].Value())
 		if k != "" {
@@ -1579,7 +1678,7 @@ func (m *model) runTaskCmd(idx int) tea.Cmd {
 			input = nil
 		}
 
-		cmd, taskID, err := StartTask(script.Config.NameAlias, command, script.Config.OutputFolderPath, input)
+		cmd, taskID, err := StartTask(script.Config.NameAlias, command, script.Config.OutputFolderPath, input, script.Config.Timeout)
 		if err != nil {
 			return TaskStartErrorMsg{ScriptNameAlias: script.Config.NameAlias, Error: err}
 		}
@@ -1758,3 +1857,94 @@ func (m *model) openHTMLOutput() {
 		_ = cmd.Start()
 	}()
 }
+
+func (m *model) openGroupHTMLOutputs() {
+	if len(m.groups) == 0 || m.groupCursor >= len(m.groups) {
+		m.statusMsg = "No group selected."
+		m.statusMsgTime = time.Now()
+		return
+	}
+	group := m.groups[m.groupCursor]
+	if len(group.Scripts) == 0 {
+		m.statusMsg = fmt.Sprintf("Group '%s' has no scripts.", group.Name)
+		m.statusMsgTime = time.Now()
+		return
+	}
+	opened := 0
+	for _, alias := range group.Scripts {
+		idx := -1
+		for i, s := range m.scripts {
+			if s.Config.NameAlias == alias {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			continue
+		}
+		script := m.scripts[idx]
+		folder := script.Config.OutputFolderPath
+		if _, err := os.Stat(folder); err != nil {
+			continue
+		}
+		var htmlFiles []string
+		_ = filepath.WalkDir(folder, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if !d.IsDir() && strings.HasSuffix(strings.ToLower(d.Name()), ".html") {
+				htmlFiles = append(htmlFiles, path)
+			}
+			return nil
+		})
+		if len(htmlFiles) == 0 {
+			continue
+		}
+		var targetFile string
+		if script.TaskID > 0 {
+			taskSub1 := fmt.Sprintf("task_%d", script.TaskID)
+			taskSub2 := fmt.Sprintf("_%d", script.TaskID)
+			for _, p := range htmlFiles {
+				if strings.Contains(filepath.Base(p), taskSub1) || strings.Contains(filepath.Base(p), taskSub2) {
+					targetFile = p
+					break
+				}
+			}
+		}
+		if targetFile == "" {
+			sort.Slice(htmlFiles, func(i, j int) bool {
+				fi1, _ := os.Stat(htmlFiles[i])
+				fi2, _ := os.Stat(htmlFiles[j])
+				if fi1 == nil || fi2 == nil {
+					return false
+				}
+				return fi1.ModTime().After(fi2.ModTime())
+			})
+			targetFile = htmlFiles[0]
+		}
+		absPath, _ := filepath.Abs(targetFile)
+		if absPath != "" {
+			targetFile = absPath
+		}
+		go func(p string) {
+			var cmd *exec.Cmd
+			switch runtime.GOOS {
+			case "windows":
+				cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", p)
+			case "darwin":
+				cmd = exec.Command("open", p)
+			default:
+				cmd = exec.Command("xdg-open", p)
+			}
+			_ = cmd.Start()
+		}(targetFile)
+		opened++
+	}
+	if opened > 0 {
+		m.statusMsg = fmt.Sprintf("Opening HTML outputs for %d script(s) in group '%s'.", opened, group.Name)
+	} else {
+		m.statusMsg = fmt.Sprintf("No HTML outputs found for group '%s'.", group.Name)
+	}
+	m.statusMsgTime = time.Now()
+}
+
