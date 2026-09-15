@@ -104,7 +104,19 @@ type ScriptState struct {
 	Checked    bool
 	StartedAt  time.Time
 	FinishedAt time.Time
+	// CPUPercent / MemMB are the most recent process-metric sample for this
+	// script's running command (0 when not running). CPUHistory / MemHistory
+	// keep a short rolling window of recent samples for the sparkline in the
+	// "progress + metrics" panel; both are capped at metricsHistoryLen entries.
+	CPUPercent float64
+	MemMB      float64
+	CPUHistory []float64
+	MemHistory []float64
 }
+
+// metricsHistoryLen bounds how many CPU/mem samples are kept per script (at
+// one sample/second via TickMsg, 60 entries is a 1-minute rolling window).
+const metricsHistoryLen = 60
 
 var activeTheme ThemeConfig
 

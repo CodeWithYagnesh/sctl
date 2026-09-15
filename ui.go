@@ -19,19 +19,74 @@ func drawProgressBar(width int, percent float64, running bool) string {
 	if filledLen > width {
 		filledLen = width
 	}
-	emptyLen := width - filledLen
 
-	var filledStyle lipgloss.Style
+	var accent string
 	if running {
-		filledStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(activeTheme.Accent))
+		accent = activeTheme.Accent
 	} else {
-		filledStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(activeTheme.Success))
+		accent = activeTheme.Success
 	}
-	emptyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(activeTheme.Idle))
+	filledStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(accent))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(activeTheme.Idle))
 
-	filled := strings.Repeat(progressCompletedChar, filledLen)
-	empty := strings.Repeat(progressPendingChar, emptyLen)
-	return filledStyle.Render(filled) + emptyStyle.Render(empty)
+	var b strings.Builder
+	for i := 0; i < width; i++ {
+		ch := ":"
+		if i%2 != 0 {
+			ch = "."
+		}
+		if i < filledLen {
+			b.WriteString(filledStyle.Render(ch))
+		} else {
+			b.WriteString(dimStyle.Render(ch))
+		}
+	}
+	return b.String()
+}
+
+// btopTitledBorder renders `content` (an already-rendered multi-line string)
+// inside a thin single-line border whose top edge carries the given title, in
+// the style of btop/htop system monitors, e.g.:
+//
+//    ┌─scripts──────────────────────┐
+//    │ ...content...                │
+//    └───────────────────────────────┘
+//
+// width is the OUTER width including the two border columns. borderColor and
+// titleColor are hex strings (e.g. activeTheme.Accent).
+func btopTitledBorder(title string, content string, width int, borderColor string, titleColor string) string {
+	if width < 4 {
+		width = 4
+	}
+	innerWidth := width - 2
+
+	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(borderColor))
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(titleColor))
+
+	label := title
+	maxLabelLen := innerWidth - 3
+	if maxLabelLen < 0 {
+		maxLabelLen = 0
+	}
+	if len(label) > maxLabelLen {
+		label = label[:maxLabelLen]
+	}
+	dashAfter := innerWidth - len(label) - 1
+	if dashAfter < 0 {
+		dashAfter = 0
+	}
+	top := borderStyle.Render("┌─") + titleStyle.Render(label) + borderStyle.Render(strings.Repeat("─", dashAfter)+"┐")
+
+	lines := strings.Split(content, "\n")
+	var body strings.Builder
+	for _, line := range lines {
+		padded := lipgloss.NewStyle().Width(innerWidth).Render(line)
+		body.WriteString(borderStyle.Render("│") + padded + borderStyle.Render("│") + "\n")
+	}
+
+	bottom := borderStyle.Render("└" + strings.Repeat("─", innerWidth) + "┘")
+
+	return top + "\n" + strings.TrimSuffix(body.String(), "\n") + "\n" + bottom
 }
 func (m *model) renderGroupDetailPanel(width, height int) string {
 	borderStyle := unfocusedStyle
@@ -1645,6 +1700,306 @@ func (m *model) renderHeader(width int) string {
 	return "\n" + line + "\n" + rule
 }
 
+// ─── 3-row layout: compact script list (row 1, col 1) ──────────────────────
+func (m *model) renderScriptsCompactPanel(width, height int) string {
+	indices := m.filteredIndices()
+	borderColor := activeTheme.Idle
+	if m.activePanel == panelLeft {
+		borderColor = activeTheme.Accent
+	}
+
+	if len(m.scripts) == 0 {
+		inner := lipgloss.NewStyle().Width(width - 4).Height(height - 2).Render(
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Italic(true).Render("No scripts. Press A."),
+		)
+		return btopTitledBorder("scripts", inner, width-2, borderColor, "#e2e8f0")
+	}
+
+	innerW := width - 4
+	if innerW < 10 {
+		innerW = 10
+	}
+	maxRows := height - 2
+	if maxRows < 1 {
+		maxRows = 1
+	}
+
+	var lines []string
+	for _, idx := range indices {
+		if len(lines) >= maxRows {
+			break
+		}
+		sc := m.scripts[idx]
+		marker := " "
+		nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#cbd5e1"))
+		if idx == m.cursor {
+			marker = "▶"
+			nameStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e2e8f0"))
+		}
+		var dot string
+		switch sc.State {
+		case "Running":
+			dot = lipgloss.NewStyle().Foreground(lipgloss.Color(activeTheme.Accent)).Render("●")
+		case "Success":
+			dot = lipgloss.NewStyle().Foreground(lipgloss.Color(activeTheme.Success)).Render("●")
+		case "Failed":
+			dot = lipgloss.NewStyle().Foreground(lipgloss.Color(activeTheme.Fail)).Render("●")
+		case "Stopped":
+			dot = lipgloss.NewStyle().Foreground(lipgloss.Color(activeTheme.Stopped)).Render("●")
+		default:
+			dot = lipgloss.NewStyle().Foreground(lipgloss.Color(activeTheme.Idle)).Render("○")
+		}
+		name := sc.Config.NameAlias
+		maxNameLen := innerW - 4
+		if maxNameLen > 0 && len(name) > maxNameLen {
+			name = name[:maxNameLen-1] + "…"
+		}
+		line := marker + " " + dot + " " + nameStyle.Render(name)
+		lines = append(lines, line)
+	}
+
+	inner := lipgloss.NewStyle().Width(width - 4).Height(height - 2).Render(strings.Join(lines, "\n"))
+	return btopTitledBorder(fmt.Sprintf("scripts (%d)", len(m.scripts)), inner, width-2, borderColor, "#e2e8f0")
+}
+
+// ─── 3-row layout: env values panel (row 1, col 2) ──────────────────────────
+// Shows the Input map (passed as environment variables to the running
+// command) for the currently selected script.
+func (m *model) renderEnvValuesPanel(width, height int) string {
+	if len(m.scripts) == 0 {
+		inner := lipgloss.NewStyle().Width(width - 4).Height(height - 2).Render(
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Italic(true).Render("No script selected."),
+		)
+		return btopTitledBorder("env", inner, width-2, activeTheme.Idle, "#e2e8f0")
+	}
+	script := m.scripts[m.cursor]
+	innerW := width - 4
+	if innerW < 10 {
+		innerW = 10
+	}
+	maxRows := height - 2
+	if maxRows < 1 {
+		maxRows = 1
+	}
+
+	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#64748b"))
+	valStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#e2e8f0"))
+
+	var lines []string
+	if len(script.Config.Input) == 0 {
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Italic(true).Render("No env values set."))
+	} else {
+		for k, v := range script.Config.Input {
+			if len(lines) >= maxRows {
+				break
+			}
+			valStr := fmt.Sprintf("%v", v)
+			line := keyStyle.Render(k+"=") + valStyle.Render(valStr)
+			if lipgloss.Width(line) > innerW {
+				line = line[:innerW]
+			}
+			lines = append(lines, line)
+		}
+	}
+
+	inner := lipgloss.NewStyle().Width(width - 4).Height(height - 2).Render(strings.Join(lines, "\n"))
+	return btopTitledBorder("env", inner, width-2, activeTheme.Idle, "#e2e8f0")
+}
+
+// ─── 3-row layout: selected script's run history (row 1, col 3) ────────────
+func (m *model) renderScriptHistoryPanel(width, height int) string {
+	if len(m.scripts) == 0 {
+		inner := lipgloss.NewStyle().Width(width - 4).Height(height - 2).Render(
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Italic(true).Render("No script selected."),
+		)
+		return btopTitledBorder("history", inner, width-2, activeTheme.Idle, "#e2e8f0")
+	}
+	script := m.scripts[m.cursor]
+	maxRows := height - 2
+	if maxRows < 1 {
+		maxRows = 1
+	}
+
+	history, err := getTaskHistory(script.Config.OutputFolderPath)
+	var lines []string
+	if err != nil || len(history) == 0 {
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Italic(true).Render("No run history yet."))
+	} else {
+		// Most recent first.
+		for i := len(history) - 1; i >= 0 && len(lines) < maxRows; i-- {
+			h := history[i]
+			var stateColor string
+			switch h.State {
+			case "Success":
+				stateColor = activeTheme.Success
+			case "Failed":
+				stateColor = activeTheme.Fail
+			case "Running":
+				stateColor = activeTheme.Accent
+			case "Stopped":
+				stateColor = activeTheme.Stopped
+			default:
+				stateColor = activeTheme.Idle
+			}
+			ts := h.Timestamp.Format("01/02 15:04")
+			line := lipgloss.NewStyle().Foreground(lipgloss.Color("#64748b")).Render(fmt.Sprintf("#%-4d ", h.TaskID)) +
+				lipgloss.NewStyle().Foreground(lipgloss.Color(stateColor)).Bold(true).Render(fmt.Sprintf("%-8s", h.State)) +
+				lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Render(ts)
+			lines = append(lines, line)
+		}
+	}
+
+	inner := lipgloss.NewStyle().Width(width - 4).Height(height - 2).Render(strings.Join(lines, "\n"))
+	return btopTitledBorder("history — "+script.Config.NameAlias, inner, width-2, activeTheme.Idle, "#e2e8f0")
+}
+
+// ─── 3-row layout: progress + time + CPU/mem graph (row 2, full width) ─────
+func (m *model) renderProgressMetricsPanel(width, height int) string {
+	if len(m.scripts) == 0 {
+		inner := lipgloss.NewStyle().Width(width - 4).Height(height - 2).Render(
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Italic(true).Render("No script selected."),
+		)
+		return btopTitledBorder("progress + metrics", inner, width-2, activeTheme.Idle, "#e2e8f0")
+	}
+	script := m.scripts[m.cursor]
+	innerW := width - 4
+	if innerW < 10 {
+		innerW = 10
+	}
+
+	label := lipgloss.NewStyle().Foreground(lipgloss.Color("#64748b"))
+	val := lipgloss.NewStyle().Foreground(lipgloss.Color("#e2e8f0")).Bold(true)
+
+	duration := "—"
+	if !script.StartedAt.IsZero() {
+		end := script.FinishedAt
+		if end.IsZero() {
+			end = time.Now()
+		}
+		duration = formatDuration(end.Sub(script.StartedAt))
+	}
+
+	progressBarW := innerW - 20
+	if progressBarW < 4 {
+		progressBarW = 4
+	}
+	progressLine := label.Render("progress ") +
+		drawProgressBar(progressBarW, float64(script.Progress)/100.0, script.State == "Running") +
+		val.Render(fmt.Sprintf(" %3d%%", script.Progress))
+	timeLine := label.Render("time taken ") + val.Render(duration)
+
+	cpuNow := 0.0
+	memNow := 0.0
+	if script.State == "Running" {
+		cpuNow = script.CPUPercent
+		memNow = script.MemMB
+	}
+	cpuLine := label.Render(fmt.Sprintf("cpu  %5.1f%% ", cpuNow)) + renderMetricSparkline(script.CPUHistory, innerW-18, activeTheme.Accent, 100.0)
+	memLine := label.Render(fmt.Sprintf("mem  %6.1fMB", memNow)) + renderMetricSparkline(script.MemHistory, innerW-18, activeTheme.Stopped, 0)
+
+	body := strings.Join([]string{progressLine, timeLine, "", cpuLine, memLine}, "\n")
+	inner := lipgloss.NewStyle().Width(width - 4).Height(height - 2).Render(body)
+	return btopTitledBorder("progress + metrics — "+script.Config.NameAlias, inner, width-2, activeTheme.Success, "#e2e8f0")
+}
+
+// renderMetricSparkline draws a dot-density sparkline for a slice of recent
+// samples. If max<=0, the series is auto-scaled to its own peak value instead
+// of a fixed ceiling (used for memory, which has no natural 0-100 bound).
+func renderMetricSparkline(samples []float64, width int, color string, max float64) string {
+	if width < 1 {
+		width = 1
+	}
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(activeTheme.Idle))
+	if len(samples) == 0 {
+		return dim.Render(strings.Repeat(".", width))
+	}
+	ceiling := max
+	if ceiling <= 0 {
+		for _, s := range samples {
+			if s > ceiling {
+				ceiling = s
+			}
+		}
+		if ceiling <= 0 {
+			ceiling = 1
+		}
+	}
+	start := 0
+	if len(samples) > width {
+		start = len(samples) - width
+	}
+	visible := samples[start:]
+
+	var b strings.Builder
+	pad := width - len(visible)
+	if pad > 0 {
+		b.WriteString(dim.Render(strings.Repeat(" ", pad)))
+	}
+	glyphs := " .:;+*#"
+	for _, v := range visible {
+		ratio := v / ceiling
+		if ratio > 1 {
+			ratio = 1
+		}
+		gi := int(ratio * float64(len(glyphs)-1))
+		if gi < 0 {
+			gi = 0
+		}
+		b.WriteString(style.Render(string(glyphs[gi])))
+	}
+	return b.String()
+}
+
+// ─── 3-row layout: full-width live logs (row 3) ─────────────────────────────
+func (m *model) renderLiveLogsPanel(width, height int) string {
+	if len(m.scripts) == 0 {
+		inner := lipgloss.NewStyle().Width(width - 4).Height(height - 2).Render(
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Italic(true).Render("No scripts configured."),
+		)
+		return btopTitledBorder("live logs", inner, width-2, activeTheme.Idle, "#e2e8f0")
+	}
+
+	script := m.scripts[m.cursor]
+	borderColor := activeTheme.Idle
+	switch script.State {
+	case "Running":
+		borderColor = activeTheme.Accent
+	case "Failed":
+		borderColor = activeTheme.Fail
+	case "Success":
+		borderColor = activeTheme.Success
+	case "Stopped":
+		borderColor = activeTheme.Stopped
+	}
+
+	availW := width - 8
+	if availW < 10 {
+		availW = 10
+	}
+	m.viewport.Width = availW
+
+	taskLabel := "—"
+	if script.TaskID > 0 {
+		taskLabel = fmt.Sprintf("Task #%d", script.TaskID)
+	}
+	statusLine := lipgloss.NewStyle().Foreground(lipgloss.Color("#64748b")).
+		Render(formatExecutionStatus(script.State, script.StartedAt, script.FinishedAt, script.Progress))
+	scriptLabel := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(activeTheme.Accent)).Render(script.Config.NameAlias)
+	taskChip := lipgloss.NewStyle().Foreground(lipgloss.Color("#475569")).Render("  " + taskLabel)
+	breadcrumb := scriptLabel + taskChip
+	sp := availW - lipgloss.Width(breadcrumb) - lipgloss.Width(statusLine)
+	if sp < 1 {
+		sp = 1
+	}
+	topLine := breadcrumb + strings.Repeat(" ", sp) + statusLine
+	divider := lipgloss.NewStyle().Foreground(lipgloss.Color("#1e293b")).Render(strings.Repeat("─", availW))
+
+	content := m.viewport.View()
+	inner := lipgloss.NewStyle().Width(width - 4).Height(height - 2).Render(topLine + "\n" + divider + "\n" + content)
+	return btopTitledBorder("live logs", inner, width-2, borderColor, "#e2e8f0")
+}
+
 func (m *model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return "Initializing TUI..."
@@ -1682,30 +2037,52 @@ func (m *model) View() string {
 	}
 
 	header := m.renderHeader(m.width)
-
-	leftWidth := int(float64(m.width) * 0.4)
-	rightWidth := m.width - leftWidth
-
 	bottomBar := m.renderBottomBar(m.width)
 	bottomBarHeight := strings.Count(bottomBar, "\n") + 1
-
 	headerHeight := m.getHeaderHeight()
-	panelHeight := m.height - headerHeight - bottomBarHeight
-	if panelHeight < 5 {
-		panelHeight = 5
+
+	gridHeight := m.height - headerHeight - bottomBarHeight
+	if gridHeight < 18 {
+		gridHeight = 18
 	}
 
-	vHeight := panelHeight - 5
+	// Row 1 (compact scripts / env / history) is short and fixed-ish; row 2
+	// (progress+metrics) is short and fixed; row 3 (live logs) takes the rest.
+	row1H := 10
+	row2H := 8
+	row3H := gridHeight - row1H - row2H
+	if row3H < 6 {
+		row3H = 6
+		row1H = (gridHeight - row3H) * 5 / 9
+		row2H = gridHeight - row3H - row1H
+		if row1H < 5 {
+			row1H = 5
+		}
+		if row2H < 5 {
+			row2H = 5
+		}
+	}
+
+	colW := m.width / 3
+	col1W := colW
+	col2W := colW
+	col3W := m.width - col1W - col2W
+
+	vHeight := row3H - 5
 	if vHeight < 1 {
 		vHeight = 1
 	}
 	m.viewport.Height = vHeight
 
-	leftPanel := m.renderLeftPanel(leftWidth, panelHeight)
-	rightPanel := m.renderRightPanel(rightWidth, panelHeight)
+	row1 := lipgloss.JoinHorizontal(lipgloss.Top,
+		m.renderScriptsCompactPanel(col1W, row1H),
+		m.renderEnvValuesPanel(col2W, row1H),
+		m.renderScriptHistoryPanel(col3W, row1H),
+	)
+	row2 := m.renderProgressMetricsPanel(m.width, row2H)
+	row3 := m.renderLiveLogsPanel(m.width, row3H)
 
-	panels := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
-	return lipgloss.JoinVertical(lipgloss.Left, header, panels, bottomBar)
+	return lipgloss.JoinVertical(lipgloss.Left, header, row1, row2, row3, bottomBar)
 }
 
 func (m *model) renderSettings() string {

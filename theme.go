@@ -25,6 +25,7 @@ var themePresets = []ThemeConfig{
 	{Name: "horizon", Accent: "#f472b6", Success: "#34d399", Fail: "#f87171", Stopped: "#fbbf24", Idle: "#0f172a"},
 	{Name: "circuit", Accent: "#fbbf24", Success: "#4ade80", Fail: "#f87171", Stopped: "#f59e0b", Idle: "#1c2f2b"},
 	{Name: "nebula", Accent: "#c084fc", Success: "#6ee7b7", Fail: "#fca5a5", Stopped: "#fcd34d", Idle: "#0f0a1a"},
+	{Name: "btop", Accent: "#8be9a7", Success: "#7ecb8f", Fail: "#e6789c", Stopped: "#e6c85a", Idle: "#4a4d52"},
 }
 
 func normalizeTheme(theme ThemeConfig) ThemeConfig {
@@ -65,12 +66,12 @@ func (m *model) applyTheme() {
 	activeTheme = m.config.Theme
 
 	focusedStyle = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+		Border(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color(activeTheme.Accent)).
 		Padding(0, 1)
 
 	unfocusedStyle = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+		Border(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color(activeTheme.Idle)).
 		Padding(0, 1)
 

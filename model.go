@@ -203,15 +203,33 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.scripts) > 0 && m.cursor >= 0 && m.cursor < len(m.scripts) && m.scripts[m.cursor].State == "Running" {
 			m.updateViewport()
 		}
+		for i := range m.scripts {
+			if m.scripts[i].State != "Running" || m.scripts[i].Cmd == nil || m.scripts[i].Cmd.Process == nil {
+				continue
+			}
+			cpu, mem, ok := sampleProcessMetrics(m.scripts[i].Cmd.Process.Pid)
+			if !ok {
+				continue
+			}
+			m.scripts[i].CPUPercent = cpu
+			m.scripts[i].MemMB = mem
+			m.scripts[i].CPUHistory = append(m.scripts[i].CPUHistory, cpu)
+			if len(m.scripts[i].CPUHistory) > metricsHistoryLen {
+				m.scripts[i].CPUHistory = m.scripts[i].CPUHistory[len(m.scripts[i].CPUHistory)-metricsHistoryLen:]
+			}
+			m.scripts[i].MemHistory = append(m.scripts[i].MemHistory, mem)
+			if len(m.scripts[i].MemHistory) > metricsHistoryLen {
+				m.scripts[i].MemHistory = m.scripts[i].MemHistory[len(m.scripts[i].MemHistory)-metricsHistoryLen:]
+			}
+		}
 		return m, tickCmd()
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		leftWidth := int(float64(m.width) * 0.42)
-		rightWidth := m.width - leftWidth
-
-		vWidth := rightWidth - 8
+		// Live logs panel (row 3 of the btop-style grid) is full width; its
+		// viewport width matches renderLiveLogsPanel's own availW calculation.
+		vWidth := m.width - 8
 		if vWidth < 10 {
 			vWidth = 10
 		}
@@ -229,6 +247,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.scripts[i].FinishedAt = time.Time{}
 				m.scripts[i].Logs = ""
 				m.scripts[i].Progress = 0
+				m.scripts[i].CPUPercent = 0
+				m.scripts[i].MemMB = 0
+				m.scripts[i].CPUHistory = nil
+				m.scripts[i].MemHistory = nil
 				if i == m.cursor {
 					m.updateViewport()
 				}
@@ -283,6 +305,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.updateViewport()
 				}
 				if msg.Done {
+					if m.scripts[i].Cmd != nil && m.scripts[i].Cmd.Process != nil {
+						clearProcessMetricsSample(m.scripts[i].Cmd.Process.Pid)
+					}
 					m.scripts[i].Cmd = nil
 					var statusLine string
 					if msg.Error != nil && msg.State != "Stopped" {
