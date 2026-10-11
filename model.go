@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,7 +17,6 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/atotto/clipboard"
 	"gopkg.in/yaml.v3"
 )
 
@@ -98,7 +98,8 @@ func initialModel() *model {
 		case 1:
 			t.Placeholder = "e.g., Deploy to production"
 		case 2:
-			t.Placeholder = "y / n (pipeline = sequential execution)"
+			t.Placeholder = "y / n"
+			t.CharLimit = 3
 		}
 		groupInputs[i] = t
 	}
@@ -129,7 +130,6 @@ func initialModel() *model {
 		groupFocusedInput: 0,
 		groupActivePanel:  panelLeft,
 		groupScriptCursor: 0,
-		groupViewport:     viewport.New(0, 0),
 		cleanupInput:      cleanupInput,
 	}
 	m.applyTheme()
@@ -197,27 +197,39 @@ func (m *model) Init() tea.Cmd {
 	return tickCmd()
 }
 
-func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+// update handles every message except the UI-only ones routed in Update
+// (ui_input.go).
+func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case TickMsg:
 		if len(m.scripts) > 0 && m.cursor >= 0 && m.cursor < len(m.scripts) && m.scripts[m.cursor].State == "Running" {
 			m.updateViewport()
+		}
+		for i := range m.scripts {
+			if m.scripts[i].State != "Running" || m.scripts[i].Cmd == nil || m.scripts[i].Cmd.Process == nil {
+				continue
+			}
+			cpu, mem, ok := sampleProcessMetrics(m.scripts[i].Cmd.Process.Pid)
+			if !ok {
+				continue
+			}
+			m.scripts[i].CPUPercent = cpu
+			m.scripts[i].MemMB = mem
+			m.scripts[i].CPUHistory = append(m.scripts[i].CPUHistory, cpu)
+			if len(m.scripts[i].CPUHistory) > metricsHistoryLen {
+				m.scripts[i].CPUHistory = m.scripts[i].CPUHistory[len(m.scripts[i].CPUHistory)-metricsHistoryLen:]
+			}
+			m.scripts[i].MemHistory = append(m.scripts[i].MemHistory, mem)
+			if len(m.scripts[i].MemHistory) > metricsHistoryLen {
+				m.scripts[i].MemHistory = m.scripts[i].MemHistory[len(m.scripts[i].MemHistory)-metricsHistoryLen:]
+			}
 		}
 		return m, tickCmd()
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		leftWidth := int(float64(m.width) * 0.42)
-		rightWidth := m.width - leftWidth
-
-		vWidth := rightWidth - 8
-		if vWidth < 10 {
-			vWidth = 10
-		}
-		m.viewport.Width = vWidth
-		m.updateViewport()
-		m.groupViewport.Width = int(float64(m.width) * 0.62) - 12
+		m.applyLayout()
 
 	case TaskStartedMsg:
 		for i := range m.scripts {
@@ -229,14 +241,19 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.scripts[i].FinishedAt = time.Time{}
 				m.scripts[i].Logs = ""
 				m.scripts[i].Progress = 0
+				m.scripts[i].CPUPercent = 0
+				m.scripts[i].MemMB = 0
+				m.scripts[i].CPUHistory = nil
+				m.scripts[i].MemHistory = nil
 				if i == m.cursor {
+					m.ui.viewing = nil
+					m.ui.paused = false
 					m.updateViewport()
 				}
 				break
 			}
 		}
-		m.statusMsg = fmt.Sprintf("Started script: %s (Task %d)", msg.ScriptNameAlias, msg.TaskID)
-		m.statusMsgTime = time.Now()
+		m.say("Started %s (task #%d)", msg.ScriptNameAlias, msg.TaskID)
 		return m, nil
 
 	case TaskStartErrorMsg:
@@ -280,13 +297,19 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				if i == m.cursor {
-					m.updateViewport()
+					m.ui.logsDirty = true
 				}
 				if msg.Done {
+					m.flushLogs()
+					if m.scripts[i].Cmd != nil && m.scripts[i].Cmd.Process != nil {
+						clearProcessMetricsSample(m.scripts[i].Cmd.Process.Pid)
+					}
 					m.scripts[i].Cmd = nil
 					var statusLine string
 					if msg.Error != nil && msg.State != "Stopped" {
 						statusLine = fmt.Sprintf("Script '%s' failed: %v", msg.ScriptNameAlias, msg.Error)
+					} else if msg.State == "Failed" {
+						statusLine = fmt.Sprintf("Script '%s' failed.", msg.ScriptNameAlias)
 					} else if msg.State == "Stopped" {
 						statusLine = fmt.Sprintf("Script '%s' was stopped.", msg.ScriptNameAlias)
 					} else {
@@ -309,11 +332,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		key := msg.String()
 		if key == "ctrl+c" {
-			for i := range m.scripts {
-				if m.scripts[i].Cmd != nil {
-					_ = StopTask(m.scripts[i].Cmd)
-				}
-			}
+			m.stopAll()
 			return m, tea.Quit
 		}
 
@@ -336,213 +355,23 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateDeleteConfirm(msg)
 		}
 
-		if m.activeView == "history" {
-			return m.updateHistoryView(msg)
-		}
-
-		if m.activeView == "filter" {
+		switch m.activeView {
+		case "filter":
 			return m.updateFilterView(msg)
-		}
-
-		// Group views
-		if m.activeView == "groups" {
+		case "help":
+			return m.updateHelp(msg)
+		case "quit_confirm":
+			return m.updateQuitConfirm(msg)
+		case "groups":
 			return m.updateGroupView(msg)
-		}
-		if m.activeView == "group_form" {
+		case "group_form":
 			return m.updateGroupForm(msg)
-		}
-		if m.activeView == "group_members" {
+		case "group_members":
 			return m.updateGroupMembers(msg)
-		}
-		if m.activeView == "group_delete_confirm" {
+		case "group_delete_confirm":
 			return m.updateGroupDeleteConfirm(msg)
 		}
-
-		switch key {
-		case "q":
-			for i := range m.scripts {
-				if m.scripts[i].Cmd != nil {
-					_ = StopTask(m.scripts[i].Cmd)
-				}
-			}
-			return m, tea.Quit
-		case "tab":
-			if m.activePanel == panelLeft {
-				m.activePanel = panelRight
-			} else {
-				m.activePanel = panelLeft
-			}
-			return m, nil
-		case "p":
-			m.parallelMode = !m.parallelMode
-			m.statusMsg = fmt.Sprintf("Parallel execution toggled. Now: %t", m.parallelMode)
-			m.statusMsgTime = time.Now()
-			return m, nil
-		case "t":
-			m.cycleTheme()
-			return m, nil
-		case "a":
-			m.editingAlias = ""
-			m.activeView = "form"
-			m.focusedInput = 0
-			for i := range m.formInputs {
-				m.formInputs[i].SetValue("")
-			}
-			m.formInputs[0].Focus()
-			return m, nil
-		case "e":
-			if len(m.scripts) > 0 {
-				sc := m.scripts[m.cursor].Config
-				m.editingAlias = sc.NameAlias
-				m.activeView = "form"
-				m.focusedInput = 0
-				m.formInputs[0].SetValue(sc.NameAlias)
-				m.formInputs[1].SetValue(sc.Description)
-				m.formInputs[2].SetValue(sc.Command)
-				m.formInputs[3].SetValue(sc.OutputFolderPath)
-				m.formInputs[4].SetValue(sc.Cron)
-				m.formInputs[5].SetValue(sc.Host)
-				m.formInputs[0].Focus()
-			}
-			return m, nil
-		case "enter":
-			if len(m.scripts) > 0 {
-				m.activeView = "env_form"
-				m.focusedEnv = 0
-				m.initEnvForm()
-			}
-			return m, nil
-		case "d", "delete":
-			if len(m.scripts) > 0 {
-				m.activeView = "delete_confirm"
-				m.confirmDeleteFocused = 0
-			}
-			return m, nil
-		case "/":
-			fi := textinput.New()
-			fi.Placeholder = "type to filter..."
-			fi.CharLimit = 60
-			fi.Width = 28
-			fi.SetValue(m.filterQuery)
-			fi.Focus()
-			m.filterInput = fi
-			m.activeView = "filter"
-			return m, nil
-		case "?":
-			m.settingsMode = true
-			if m.settingsInputs == nil {
-				m.settingsInputs = make([]textinput.Model, 2)
-				for i := range m.settingsInputs {
-					ti := textinput.New()
-					ti.Width = 20
-					m.settingsInputs[i] = ti
-				}
-			}
-			m.settingsInputs[0].SetValue(m.config.ProgressBar.Completed)
-			m.settingsInputs[1].SetValue(m.config.ProgressBar.Pending)
-			m.settingsInputs[0].Focus()
-			return m, nil
-		case "o":
-			m.openHTMLOutput()
-			return m, nil
-		case "h", "H":
-			if len(m.scripts) > 0 {
-				focusedScript := m.scripts[m.cursor]
-				history, err := getTaskHistory(focusedScript.Config.OutputFolderPath)
-				if err != nil || len(history) == 0 {
-					m.statusMsg = "No history found for script: " + focusedScript.Config.NameAlias
-					m.statusMsgTime = time.Now()
-				} else {
-					m.historyItems = history
-					m.historyCursor = 0
-					m.activeView = "history"
-				}
-			}
-			return m, nil
-		case "s":
-			m.stopSelected()
-			return m, nil
-		case "r":
-			cmd := m.runSelected()
-			return m, cmd
-		case " ":
-			if len(m.scripts) > 0 {
-				m.scripts[m.cursor].Checked = !m.scripts[m.cursor].Checked
-			}
-			return m, nil
-		case "pgup", "[":
-			m.viewport.LineUp(3)
-			return m, nil
-		case "pgdn", "]":
-			m.viewport.LineDown(3)
-			return m, nil
-		case "up", "k":
-			if m.activePanel == panelLeft {
-				indices := m.filteredIndices()
-				for pos, idx := range indices {
-					if idx == m.cursor && pos > 0 {
-						m.cursor = indices[pos-1]
-						m.updateViewport()
-						break
-					}
-				}
-			} else {
-				m.viewport.LineUp(1)
-			}
-			return m, nil
-		case "down", "j":
-			if m.activePanel == panelLeft {
-				indices := m.filteredIndices()
-				for pos, idx := range indices {
-					if idx == m.cursor && pos < len(indices)-1 {
-						m.cursor = indices[pos+1]
-						m.updateViewport()
-						break
-					}
-				}
-			} else {
-				m.viewport.LineDown(1)
-			}
-			return m, nil
-		case "ctrl+up":
-			if len(m.scripts) > 1 && m.cursor > 0 {
-				m.reorderScript(m.cursor, m.cursor-1)
-				m.cursor--
-				m.updateViewport()
-			}
-			return m, nil
-		case "ctrl+down":
-			if len(m.scripts) > 1 && m.cursor < len(m.scripts)-1 {
-				m.reorderScript(m.cursor, m.cursor+1)
-				m.cursor++
-				m.updateViewport()
-			}
-			return m, nil
-		case "c":
-			if m.activePanel == panelRight && len(m.scripts) > 0 {
-				logs := m.scripts[m.cursor].Logs
-				if logs != "" {
-					clipboard.WriteAll(logs)
-					m.statusMsg = "Log copied to clipboard"
-				} else {
-					m.statusMsg = "No logs to copy"
-				}
-				m.statusMsgTime = time.Now()
-				return m, nil
-			}
-			m.cleanupMode = true
-			m.cleanupModeAll = true
-			m.cleanupAlias = ""
-			m.cleanupOlderDays = -1
-			m.cleanupInput.SetValue("")
-			m.cleanupInput.Focus()
-			return m, nil
-		case "g":
-			m.activeView = "groups"
-			m.groupCursor = 0
-			m.groups = m.config.Groups
-			return m, nil
-		}
+		return m.updateMain(msg)
 	}
 	return m, nil
 }
@@ -553,14 +382,28 @@ func (m *model) updateCleanup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.cleanupMode = false
 		return m, nil
-	case "tab":
-		m.cleanupModeAll = !m.cleanupModeAll
+	case "tab", "shift+tab":
+		if m.selected() != nil {
+			m.cleanupModeAll = !m.cleanupModeAll
+		}
+		m.ui.cleanupArmed = false
 		return m, nil
 	case "enter":
 		older := -1
 		val := strings.TrimSpace(m.cleanupInput.Value())
 		if val != "" {
-			fmt.Sscanf(val, "%d", &older)
+			n, err := strconv.Atoi(val)
+			if err != nil || n < 0 {
+				m.say("Error: days must be a whole number (or empty)")
+				m.ui.cleanupArmed = false
+				return m, nil
+			}
+			older = n
+		}
+		// Deleting every run record is irreversible: ask for a second Enter.
+		if older < 0 && !m.ui.cleanupArmed {
+			m.ui.cleanupArmed = true
+			return m, nil
 		}
 		alias := ""
 		if !m.cleanupModeAll {
@@ -568,20 +411,16 @@ func (m *model) updateCleanup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		deleted, err := cleanupTasks(m.config, alias, older)
 		if err != nil {
-			m.statusMsg = fmt.Sprintf("Cleanup error: %v", err)
+			m.say("Error: cleanup failed: %v", err)
 		} else {
-			m.statusMsg = fmt.Sprintf("Cleanup complete. Deleted %d task file(s).", deleted)
+			m.say("Cleanup complete — deleted %d run record(s)", deleted)
 		}
-		m.statusMsgTime = time.Now()
 		m.cleanupMode = false
-		return m, nil
-	case "a":
-		m.cleanupModeAll = true
-		return m, nil
-	case "s":
-		m.cleanupModeAll = false
-		return m, nil
+		m.ui.cleanupArmed = false
+		m.ui.hist = nil
+		return m, m.ensureHistory(false)
 	}
+	m.ui.cleanupArmed = false
 	var cmd tea.Cmd
 	m.cleanupInput, cmd = m.cleanupInput.Update(msg)
 	return m, cmd
@@ -593,7 +432,7 @@ func (m *model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.settingsMode = false
 		return m, nil
-	case "tab":
+	case "tab", "shift+tab", "down", "up":
 		if len(m.settingsInputs) >= 2 {
 			if m.settingsInputs[0].Focused() {
 				m.settingsInputs[0].Blur()
@@ -604,19 +443,34 @@ func (m *model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-	case "enter":
-		m.config.ProgressBar.Completed = m.settingsInputs[0].Value()
-		m.config.ProgressBar.Pending = m.settingsInputs[1].Value()
-		progressCompletedChar = m.config.ProgressBar.Completed
-		progressPendingChar = m.config.ProgressBar.Pending
-		_ = SaveConfig(m.config)
-		m.statusMsg = "Progress bar settings saved"
-		m.statusMsgTime = time.Now()
+	case "ctrl+r":
+		m.settingsInputs[0].SetValue("▮")
+		m.settingsInputs[1].SetValue("▯")
+		return m, nil
+	case "enter", "ctrl+s":
+		fill := strings.TrimSpace(m.settingsInputs[0].Value())
+		track := strings.TrimSpace(m.settingsInputs[1].Value())
+		if fill == "" || track == "" {
+			m.say("Error: both glyphs are required (Ctrl+R restores defaults)")
+			return m, nil
+		}
+		m.config.ProgressBar.Completed = fill
+		m.config.ProgressBar.Pending = track
+		progressCompletedChar = fill
+		progressPendingChar = track
+		if err := SaveConfig(m.config); err != nil {
+			m.say("Error: cannot save settings: %v", err)
+			return m, nil
+		}
+		m.say("Progress bar settings saved")
 		m.settingsMode = false
 		return m, nil
 	}
 	var cmds []tea.Cmd
 	for i := range m.settingsInputs {
+		if !m.settingsInputs[i].Focused() {
+			continue
+		}
 		var cmd tea.Cmd
 		m.settingsInputs[i], cmd = m.settingsInputs[i].Update(msg)
 		cmds = append(cmds, cmd)
@@ -649,107 +503,20 @@ func (m *model) stopGroupScripts() {
 	}
 	m.statusMsgTime = time.Now()
 }
-func (m *model) updateGroupView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := msg.String()
-	switch key {
-	case "esc", "g":
-		m.activeView = "main"
-		m.groupActivePanel = panelLeft
-		return m, nil
-	case "q":
-		for i := range m.scripts {
-			if m.scripts[i].Cmd != nil {
-				_ = StopTask(m.scripts[i].Cmd)
-			}
-		}
-		return m, tea.Quit
-	case "tab":
-		if m.groupActivePanel == panelLeft {
-			m.groupActivePanel = panelRight
-		} else {
-			m.groupActivePanel = panelLeft
-		}
-		return m, nil
-	case "up", "k":
-		if m.groupActivePanel == panelLeft {
-			if m.groupCursor > 0 {
-				m.groupCursor--
-				m.groupScriptCursor = 0
-			}
-		} else {
-			m.groupViewport.LineUp(1)
-		}
-		return m, nil
-	case "down", "j":
-		if m.groupActivePanel == panelLeft {
-			if m.groupCursor < len(m.groups)-1 {
-				m.groupCursor++
-				m.groupScriptCursor = 0
-			}
-		} else {
-			m.groupViewport.LineDown(1)
-		}
-		return m, nil
-	case "pgup", "[":
-		m.groupViewport.LineUp(3)
-		return m, nil
-	case "pgdn", "]":
-		m.groupViewport.LineDown(3)
-		return m, nil
-	case "a":
-		if m.groupActivePanel == panelLeft {
-			m.editingGroupName = ""
-			m.activeView = "group_form"
-			m.initGroupForm()
-		}
-		return m, nil
-	case "e":
-		if m.groupActivePanel == panelLeft && len(m.groups) > 0 {
-			g := m.groups[m.groupCursor]
-			m.editingGroupName = g.Name
-			m.activeView = "group_form"
-			m.initGroupForm()
-			m.groupFormInputs[0].SetValue(g.Name)
-			m.groupFormInputs[1].SetValue(g.Description)
-			if g.Pipeline {
-				m.groupFormInputs[2].SetValue("y")
-			} else {
-				m.groupFormInputs[2].SetValue("n")
-			}
-			m.groupFocusedInput = 0
-			m.groupFormInputs[0].Focus()
-		}
-		return m, nil
-	case "enter":
-		if m.groupActivePanel == panelLeft && len(m.groups) > 0 {
-			m.activeView = "group_members"
-			m.initGroupMembers()
-		}
-		return m, nil
-	case "d", "delete":
-		if m.groupActivePanel == panelLeft && len(m.groups) > 0 {
-			m.activeView = "group_delete_confirm"
-			m.confirmDeleteFocused = 0
-		}
-		return m, nil
-	case "r":
-		cmd := m.runGroup()
-		return m, cmd
-	case "s":
-		m.stopGroupScripts()
-		return m, nil
-	case "o":
-		m.openGroupHTMLOutputs()
-		return m, nil
-	}
-	return m, nil
-}
 func (m *model) updateGroupForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	switch key {
 	case "esc":
 		m.activeView = "groups"
 		return m, nil
+	case "ctrl+s":
+		m.submitGroupForm()
+		return m, nil
+	case " ", "left", "right":
+		if m.groupFocusedInput == 2 {
+			m.groupFormInputs[2].SetValue(yesNo(!isYes(strings.ToLower(strings.TrimSpace(m.groupFormInputs[2].Value())))))
+			return m, nil
+		}
 	case "tab", "down":
 		if m.groupFocusedInput < 4 {
 			if m.groupFocusedInput < 3 {
@@ -865,7 +632,8 @@ func (m *model) initGroupForm() {
 		case 1:
 			t.Placeholder = "e.g., Deploy to production"
 		case 2:
-			t.Placeholder = "y / n (pipeline = sequential execution)"
+			t.Placeholder = "y / n"
+			t.CharLimit = 3
 		}
 		m.groupFormInputs[i] = t
 	}
@@ -894,7 +662,7 @@ func (m *model) submitGroupForm() {
 	name := strings.TrimSpace(m.groupFormInputs[0].Value())
 	desc := strings.TrimSpace(m.groupFormInputs[1].Value())
 	pipelineVal := strings.ToLower(strings.TrimSpace(m.groupFormInputs[2].Value()))
-	pipeline := pipelineVal == "y" || pipelineVal == "yes"
+	pipeline := isYes(pipelineVal)
 
 	if name == "" {
 		m.statusMsg = "Error: Group name is required."
@@ -978,10 +746,24 @@ func (m *model) submitGroupMembers() {
 	if m.groupCursor >= len(m.groups) {
 		return
 	}
-	var newScripts []string
-	for i, checked := range m.groupMemberChecked {
-		if checked {
-			newScripts = append(newScripts, m.scripts[i].Config.NameAlias)
+	// Keep the existing step order (it is the pipeline order); new members
+	// are appended in list order.
+	checked := make(map[string]bool, len(m.scripts))
+	for i, c := range m.groupMemberChecked {
+		if c && i < len(m.scripts) {
+			checked[m.scripts[i].Config.NameAlias] = true
+		}
+	}
+	newScripts := []string{}
+	for _, alias := range m.config.Groups[m.groupCursor].Scripts {
+		if checked[alias] {
+			newScripts = append(newScripts, alias)
+			delete(checked, alias)
+		}
+	}
+	for _, sc := range m.scripts {
+		if checked[sc.Config.NameAlias] {
+			newScripts = append(newScripts, sc.Config.NameAlias)
 		}
 	}
 	m.config.Groups[m.groupCursor].Scripts = newScripts
@@ -1102,9 +884,12 @@ func (m *model) updateFilterView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.filterQuery = ""
 		m.activeView = "main"
-		return m, nil
-	case "enter":
+		return m, m.afterSelectionChange()
+	case "enter", "down", "up":
 		m.activeView = "main"
+		if len(m.filteredIndices()) == 0 {
+			m.filterQuery = ""
+		}
 		return m, nil
 	}
 	var cmd tea.Cmd
@@ -1121,7 +906,7 @@ func (m *model) updateFilterView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if !found {
 			m.cursor = indices[0]
-			m.updateViewport()
+			return m, tea.Batch(cmd, m.afterSelectionChange())
 		}
 	}
 	return m, cmd
@@ -1132,6 +917,9 @@ func (m *model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc":
 		m.activeView = "main"
+		return m, nil
+	case "ctrl+s":
+		m.submitForm()
 		return m, nil
 	case "tab", "down":
 		if m.focusedInput < 8 {
@@ -1181,51 +969,6 @@ func (m *model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.formInputs[m.focusedInput], cmd = m.formInputs[m.focusedInput].Update(msg)
 		return m, cmd
-	}
-	return m, nil
-}
-
-func (m *model) updateHistoryView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := msg.String()
-	switch key {
-	case "esc", "q":
-		m.activeView = "main"
-		return m, nil
-	case "up", "k":
-		if m.historyCursor > 0 {
-			m.historyCursor--
-		}
-		return m, nil
-	case "down", "j":
-		if m.historyCursor < len(m.historyItems)-1 {
-			m.historyCursor++
-		}
-		return m, nil
-	case "enter":
-		if len(m.historyItems) > 0 {
-			selected := m.historyItems[m.historyCursor]
-			data, err := os.ReadFile(selected.FilePath)
-			if err == nil {
-				var taskFile TaskYAML
-				if err := yaml.Unmarshal(data, &taskFile); err == nil {
-					m.scripts[m.cursor].Logs = taskFile.Task.Logs.Value
-					m.scripts[m.cursor].TaskID = taskFile.Task.TaskID
-					m.scripts[m.cursor].State = taskFile.Task.State
-					m.scripts[m.cursor].Progress = taskFile.Task.Progress
-					m.updateViewport()
-					m.statusMsg = fmt.Sprintf("Loaded logs for Task #%d", taskFile.Task.TaskID)
-					m.statusMsgTime = time.Now()
-				} else {
-					m.statusMsg = fmt.Sprintf("Error parsing task file: %v", err)
-					m.statusMsgTime = time.Now()
-				}
-			} else {
-				m.statusMsg = fmt.Sprintf("Error reading task file: %v", err)
-				m.statusMsgTime = time.Now()
-			}
-		}
-		m.activeView = "main"
-		return m, nil
 	}
 	return m, nil
 }
@@ -1370,6 +1113,14 @@ func (m *model) updateEnvForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.activeView = "main"
 		return m, nil
+	case "ctrl+s":
+		m.submitEnvForm()
+		return m, nil
+	case " ", "left", "right":
+		if m.focusedEnv == 21 {
+			m.envInputs[21].SetValue(yesNo(!isYes(strings.ToLower(strings.TrimSpace(m.envInputs[21].Value())))))
+			return m, nil
+		}
 	case "tab", "down":
 		if m.focusedEnv < 24 {
 			if m.focusedEnv < 22 {
@@ -1489,13 +1240,21 @@ func (m *model) initEnvForm() {
 }
 
 func (m *model) submitEnvForm() {
-	focusedScript := &m.scripts[m.cursor]
+	focusedScript := m.selected()
+	if focusedScript == nil {
+		m.activeView = "main"
+		return
+	}
 	cronVal := strings.TrimSpace(m.envInputs[0].Value())
+	if cronVal != "" && !isValidCron(cronVal) {
+		m.say("Error: invalid cron format — expected 5 space-separated fields")
+		return
+	}
 	focusedScript.Config.Cron = cronVal
 
 	if len(m.envInputs) > 21 {
 		notifyVal := strings.ToLower(strings.TrimSpace(m.envInputs[21].Value()))
-		focusedScript.Config.Notify = notifyVal == "y" || notifyVal == "yes"
+		focusedScript.Config.Notify = isYes(notifyVal)
 	}
 
 	existingKeys := make([]string, 0, len(focusedScript.Config.Input))
@@ -1505,7 +1264,7 @@ func (m *model) submitEnvForm() {
 	sort.Strings(existingKeys)
 	shownInForm := make(map[string]bool)
 	for i, k := range existingKeys {
-		if i >= 5 {
+		if i >= 10 { // the form shows at most 10 pairs; the rest are kept as-is
 			break
 		}
 		shownInForm[k] = true
@@ -1517,7 +1276,7 @@ func (m *model) submitEnvForm() {
 			inputsMap[k] = v
 		}
 	}
-	for i := 1; i < 21; i += 2 {
+	for i := 1; i < 21 && i+1 < len(m.envInputs); i += 2 {
 		k := strings.TrimSpace(m.envInputs[i].Value())
 		v := strings.TrimSpace(m.envInputs[i+1].Value())
 		if k != "" {
@@ -1525,12 +1284,6 @@ func (m *model) submitEnvForm() {
 		}
 	}
 	focusedScript.Config.Input = inputsMap
-
-	if cronVal != "" && !isValidCron(cronVal) {
-		m.statusMsg = "Error: Invalid cron format. Expected 5 space-separated fields."
-		m.statusMsgTime = time.Now()
-		return
-	}
 
 	for ci, sc := range m.config.Scripts {
 		if sc.NameAlias == focusedScript.Config.NameAlias {
@@ -1540,11 +1293,10 @@ func (m *model) submitEnvForm() {
 	}
 	err := SaveConfig(m.config)
 	if err != nil {
-		m.statusMsg = fmt.Sprintf("Error saving config: %v", err)
-	} else {
-		m.statusMsg = "Configuration updated successfully."
+		m.say("Error: cannot save config: %v", err)
+		return
 	}
-	m.statusMsgTime = time.Now()
+	m.say("Configuration for '%s' updated successfully", focusedScript.Config.NameAlias)
 	m.activeView = "main"
 }
 
@@ -1623,35 +1375,42 @@ func InterpretCarriageReturns(s string) string {
 }
 
 func prepareViewportLogs(logs string, width int) string {
-	normalized := InterpretCarriageReturns(logs)
+	normalized := sanitizeLog(InterpretCarriageReturns(logs))
 	lines := strings.Split(normalized, "\n")
 	const maxViewportLines = 350
 	if len(lines) > maxViewportLines {
-		trimmed := lines[len(lines)-maxViewportLines:]
-		trimmed = append([]string{"[truncated: showing the last 350 lines for performance]"}, trimmed...)
-		lines = trimmed
-		normalized = strings.Join(lines, "\n")
+		lines = append([]string{"[truncated: showing the last 350 lines for performance]"}, lines[len(lines)-maxViewportLines:]...)
 	}
+	for i, l := range lines {
+		lines[i] = colorizeLogLine(l)
+	}
+	normalized = strings.Join(lines, "\n")
 	if width > 0 {
 		normalized = lipgloss.NewStyle().Width(width).Render(normalized)
 	}
 	return normalized
 }
 
+// updateViewport rebuilds the log viewport for the selected script (or for the
+// past run being viewed). While a script runs and follow mode is on, the view
+// sticks to the newest output.
 func (m *model) updateViewport() {
-	if len(m.scripts) == 0 {
-		m.viewport.SetContent("No scripts configured.")
+	s := m.selected()
+	if s == nil {
+		m.viewport.SetContent("")
 		return
 	}
-	focusedScript := m.scripts[m.cursor]
-	logs := focusedScript.Logs
-	if logs == "" {
-		logs = lipgloss.NewStyle().Foreground(lipgloss.Color("#4a5568")).Italic(true).Render("No output yet — run the script to see logs here.")
-	} else {
-		logs = prepareViewportLogs(logs, m.viewport.Width)
+	logs, live := s.Logs, s.State == "Running"
+	if m.ui.viewing != nil {
+		logs, live = m.ui.viewing.logs, false
 	}
-	m.viewport.SetContent(logs)
-	if focusedScript.State == "Running" {
+	if logs == "" {
+		m.viewport.SetContent("")
+		return
+	}
+	wasAtBottom := m.viewport.AtBottom()
+	m.viewport.SetContent(prepareViewportLogs(logs, m.viewport.Width))
+	if live && !m.ui.paused && (wasAtBottom || m.viewport.YOffset == 0) {
 		m.viewport.GotoBottom()
 	}
 }
@@ -1752,7 +1511,10 @@ func (m *model) runNextSequentialCmd() tea.Cmd {
 }
 
 func (m *model) stopSelected() {
-	highlighted := &m.scripts[m.cursor]
+	highlighted := m.selected()
+	if highlighted == nil {
+		return
+	}
 	if highlighted.State == "Running" && highlighted.Cmd != nil {
 		err := StopTask(highlighted.Cmd)
 		if err != nil {
@@ -1947,4 +1709,3 @@ func (m *model) openGroupHTMLOutputs() {
 	}
 	m.statusMsgTime = time.Now()
 }
-

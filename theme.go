@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 var themePresets = []ThemeConfig{
@@ -25,6 +23,7 @@ var themePresets = []ThemeConfig{
 	{Name: "horizon", Accent: "#f472b6", Success: "#34d399", Fail: "#f87171", Stopped: "#fbbf24", Idle: "#0f172a"},
 	{Name: "circuit", Accent: "#fbbf24", Success: "#4ade80", Fail: "#f87171", Stopped: "#f59e0b", Idle: "#1c2f2b"},
 	{Name: "nebula", Accent: "#c084fc", Success: "#6ee7b7", Fail: "#fca5a5", Stopped: "#fcd34d", Idle: "#0f0a1a"},
+	{Name: "btop", Accent: "#8be9a7", Success: "#7ecb8f", Fail: "#e6789c", Stopped: "#e6c85a", Idle: "#4a4d52"},
 }
 
 func normalizeTheme(theme ThemeConfig) ThemeConfig {
@@ -64,48 +63,7 @@ func (m *model) applyTheme() {
 	m.config.Theme = normalizeTheme(m.config.Theme)
 	activeTheme = m.config.Theme
 
-	focusedStyle = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(activeTheme.Accent)).
-		Padding(0, 1)
-
-	unfocusedStyle = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(activeTheme.Idle)).
-		Padding(0, 1)
-
-	titleStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(activeTheme.Accent))
-
-	badgeRunning = lipgloss.NewStyle().
-		Background(lipgloss.Color(activeTheme.Accent)).
-		Foreground(lipgloss.Color("#ffffff")).
-		Bold(true).
-		Padding(0, 1)
-
-	badgeSuccess = lipgloss.NewStyle().
-		Background(lipgloss.Color(activeTheme.Success)).
-		Foreground(lipgloss.Color("#ffffff")).
-		Bold(true).
-		Padding(0, 1)
-
-	badgeFailed = lipgloss.NewStyle().
-		Background(lipgloss.Color(activeTheme.Fail)).
-		Foreground(lipgloss.Color("#ffffff")).
-		Bold(true).
-		Padding(0, 1)
-
-	badgeStopped = lipgloss.NewStyle().
-		Background(lipgloss.Color(activeTheme.Stopped)).
-		Foreground(lipgloss.Color("#000000")).
-		Bold(true).
-		Padding(0, 1)
-
-	badgeIdle = lipgloss.NewStyle().
-		Background(lipgloss.Color(activeTheme.Idle)).
-		Foreground(lipgloss.Color("#9ca3af")).
-		Padding(0, 1)
+	rebuildPalette()
 }
 
 func (m *model) cycleTheme() {
