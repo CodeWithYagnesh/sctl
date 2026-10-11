@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"gopkg.in/yaml.v3"
 )
 
@@ -139,7 +138,6 @@ type model struct {
 	confirmDeleteFocused int
 	statusMsg            string
 	statusMsgTime        time.Time
-	historyItems         []TaskSummary
 	historyCursor        int
 	editingAlias         string
 	filterQuery          string
@@ -156,21 +154,25 @@ type model struct {
 	editingGroupName   string
 	groupMemberCursor  int
 	groupMemberChecked []bool
-	groupActivePanel  activePanel
-	groupScriptCursor int
+	groupActivePanel   activePanel
+	groupScriptCursor  int
 	groupDetailScroll  int
-	groupViewport      viewport.Model
 
 	// Cleanup popup state
-	cleanupMode       bool
-	cleanupAlias      string
-	cleanupOlderDays  int
-	cleanupInput      textinput.Model
-	cleanupModeAll    bool
+	cleanupMode      bool
+	cleanupAlias     string
+	cleanupOlderDays int
+	cleanupInput     textinput.Model
+	cleanupModeAll   bool
 
 	// Settings popup state
-	settingsMode      bool
-	settingsInputs    []textinput.Model
+	settingsMode   bool
+	settingsInputs []textinput.Model
+
+	// ui holds the state that exists only for the redesigned interface
+	// (tabs, follow mode, async history cache, help scroll, ...). Its zero
+	// value is valid.
+	ui uiState
 }
 
 type TaskStartedMsg struct {
@@ -188,48 +190,3 @@ type TaskStartErrorMsg struct {
 type TickMsg time.Time
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-
-var (
-	focusedStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#6366f1")).
-			Padding(0, 1)
-
-	unfocusedStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#2d3748")).
-			Padding(0, 1)
-
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#6366f1"))
-
-	badgeRunning = lipgloss.NewStyle().
-			Background(lipgloss.Color("#10b981")).
-			Foreground(lipgloss.Color("#ffffff")).
-			Bold(true).
-			Padding(0, 1)
-
-	badgeSuccess = lipgloss.NewStyle().
-			Background(lipgloss.Color("#059669")).
-			Foreground(lipgloss.Color("#ffffff")).
-			Bold(true).
-			Padding(0, 1)
-
-	badgeFailed = lipgloss.NewStyle().
-			Background(lipgloss.Color("#f43f5e")).
-			Foreground(lipgloss.Color("#ffffff")).
-			Bold(true).
-			Padding(0, 1)
-
-	badgeStopped = lipgloss.NewStyle().
-			Background(lipgloss.Color("#f59e0b")).
-			Foreground(lipgloss.Color("#000000")).
-			Bold(true).
-			Padding(0, 1)
-
-	badgeIdle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#374151")).
-			Foreground(lipgloss.Color("#9ca3af")).
-			Padding(0, 1)
-)

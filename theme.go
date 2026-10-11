@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 var themePresets = []ThemeConfig{
@@ -65,48 +63,7 @@ func (m *model) applyTheme() {
 	m.config.Theme = normalizeTheme(m.config.Theme)
 	activeTheme = m.config.Theme
 
-	focusedStyle = lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color(activeTheme.Accent)).
-		Padding(0, 1)
-
-	unfocusedStyle = lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color(activeTheme.Idle)).
-		Padding(0, 1)
-
-	titleStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(activeTheme.Accent))
-
-	badgeRunning = lipgloss.NewStyle().
-		Background(lipgloss.Color(activeTheme.Accent)).
-		Foreground(lipgloss.Color("#ffffff")).
-		Bold(true).
-		Padding(0, 1)
-
-	badgeSuccess = lipgloss.NewStyle().
-		Background(lipgloss.Color(activeTheme.Success)).
-		Foreground(lipgloss.Color("#ffffff")).
-		Bold(true).
-		Padding(0, 1)
-
-	badgeFailed = lipgloss.NewStyle().
-		Background(lipgloss.Color(activeTheme.Fail)).
-		Foreground(lipgloss.Color("#ffffff")).
-		Bold(true).
-		Padding(0, 1)
-
-	badgeStopped = lipgloss.NewStyle().
-		Background(lipgloss.Color(activeTheme.Stopped)).
-		Foreground(lipgloss.Color("#000000")).
-		Bold(true).
-		Padding(0, 1)
-
-	badgeIdle = lipgloss.NewStyle().
-		Background(lipgloss.Color(activeTheme.Idle)).
-		Foreground(lipgloss.Color("#9ca3af")).
-		Padding(0, 1)
+	rebuildPalette()
 }
 
 func (m *model) cycleTheme() {
