@@ -242,6 +242,25 @@ groups:
 
 Config saves automatically create timestamped backups `config.yaml.<timestamp>.bak` keeping the last 5 versions.
 
+### Cleaning Up Run Records 🧹
+
+Press `x` in the TUI (or use `sctl cleanup`) to delete old `task_<id>.yaml` run records. HTML reports and every other file in the output folder are never touched, and records of tasks that are still running are skipped.
+
+In the TUI: tick the scripts (`Space`, `a` = all/none), pick a mode, press `Enter` to review exactly what will be deleted, then `Enter` again to confirm (`Esc` goes back).
+
+| Mode | Meaning |
+|---|---|
+| **Keep last** (default, N=1) | Keep the newest N records per script, delete the rest |
+| **Older than** | Delete records older than N days |
+| **Everything** | Delete every record |
+
+```bash
+sctl cleanup --alias backup_db,deploy            # keep last 1 of these scripts (asks to confirm)
+sctl cleanup --all --keep-last 5                 # keep the newest 5 of every script
+sctl cleanup --all --older-than 30 --yes         # delete records older than 30 days, no prompt
+sctl cleanup --alias backup_db --remove-all      # delete every record of one script
+```
+
 ### Environment Variables 🌐
 
 | Variable | Description |

@@ -434,42 +434,129 @@ func (m *model) groupMembersDialog(w, h int) (modalSpec, []string, []string) {
 // ─── cleanup & settings ─────────────────────────────────────────────────────
 
 func (m *model) cleanupDialog(w, h int) (modalSpec, []string, []string) {
-	pw := dialogWidth(w, 64)
+	cs := &m.ui.cleanup
+	pw := dialogWidth(w, 68)
 	cw := pw - 4
-	spec := modalSpec{title: "Clean up run records", wantW: pw, danger: m.ui.cleanupArmed}
-	scopeThis := "This script"
-	if m.cleanupAlias != "" {
-		scopeThis = "This script (" + truncate(m.cleanupAlias, 20) + ")"
+	spec := modalSpec{title: "Clean up run records", wantW: pw}
+	if cs.confirm {
+		return m.cleanupReviewDialog(spec, cw, h)
 	}
+
+	label := func(text string, focused bool) string {
+		if focused {
+			return paintB("▸ ", pal.accent) + paintB(fit(text, formLabelW), pal.text)
+		}
+		return "  " + tMuted(fit(text, formLabelW))
+	}
+	picked := 0
+	for _, s := range m.scripts {
+		if cs.checked[s.Config.NameAlias] {
+			picked++
+		}
+	}
+
+	body := []string{
+		tMuted(truncate("Deletes task_<id>.yaml run records. HTML reports stay.", cw)),
+		"",
+		label("Scripts", cs.focus == cleanupFocusScripts) + tDim(fmt.Sprintf("%d of %d selected", picked, len(m.scripts))),
+	}
+	if len(m.scripts) == 0 {
+		body = append(body, "    "+tDim("There are no scripts."))
+	}
+	visible := clampInt(h-16, 3, 8)
+	start, end := window(len(m.scripts), visible, cs.cursor)
+	for i := start; i < end; i++ {
+		s := m.scripts[i]
+		on := cs.checked[s.Config.NameAlias]
+		mark := "    "
+		if i == cs.cursor && cs.focus == cleanupFocusScripts {
+			mark = "  " + paintB("▸ ", pal.accent)
+		}
+		box, fg := tDim("○"), pal.muted
+		if on {
+			box, fg = paintB("◉", pal.accent), pal.text
+		}
+		row := mark + box + " " + paint(truncate(oneLine(s.Config.NameAlias), max(4, cw-8)), fg)
+		if i == cs.cursor && cs.focus == cleanupFocusScripts {
+			row = bgWrap(row, cw, pal.surface)
+		}
+		body = append(body, row)
+	}
+	body = append(body, "")
+
 	opt := func(sel bool, text string) string {
 		if sel {
 			return paintB("◉ "+text, pal.text)
 		}
 		return tDim("○ " + text)
 	}
-	m.cleanupInput.Width = 8
-	m.cleanupInput.CharLimit = 5
-	body := []string{
-		tMuted("Deletes saved run records (task_<id>.yaml files)."),
-		"",
-		tMuted(fit("Scope", formLabelW)) + opt(!m.cleanupModeAll, scopeThis) + "   " + opt(m.cleanupModeAll, "All scripts"),
-		tMuted(fit("Older than", formLabelW)) + inputBox(&m.cleanupInput, true, 9) + tMuted("  days"),
-		tDim(fit("", formLabelW) + "leave empty to delete every record"),
-		"",
+	body = append(body,
+		label("Remove", cs.focus == cleanupFocusMode)+
+			opt(cs.mode == CleanupKeepLast, "Keep last")+"   "+
+			opt(cs.mode == CleanupOlderThan, "Older than")+"   "+
+			opt(cs.mode == CleanupAll, "Everything"))
+
+	var valueRow string
+	switch cs.mode {
+	case CleanupKeepLast:
+		valueRow = label("Keep", cs.focus == cleanupFocusValue) + inputBox(&m.cleanupInput, cs.focus == cleanupFocusValue, 9) + tMuted("  newest record(s) per script")
+	case CleanupOlderThan:
+		valueRow = label("Older than", cs.focus == cleanupFocusValue) + inputBox(&m.cleanupInput, cs.focus == cleanupFocusValue, 9) + tMuted("  days")
+	default:
+		valueRow = label("", false) + tDim("every record of the selected scripts")
 	}
+	body = append(body, valueRow, "")
+
 	switch {
-	case m.ui.cleanupArmed:
-		what := "ALL run records"
-		if !m.cleanupModeAll {
-			what = "ALL run records of " + m.cleanupAlias
-		}
-		body = append(body, paintB("⚠ Press Enter again to permanently delete "+what, pal.fail))
 	case m.formError() != "":
 		body = append(body, m.errorLine(cw))
+	case cs.notice != "":
+		body = append(body, paint("• "+truncate(cs.notice, cw-2), pal.stopped))
 	default:
-		body = append(body, tDim("This cannot be undone."))
+		body = append(body, tDim("Enter shows what will be deleted — nothing is removed yet."))
 	}
-	footer := []string{renderHints(cw, []hint{{"Enter", "delete", 0}, {"Tab", "scope", 1}, {"Esc", "cancel", 0}})}
+
+	hs := []hint{{"Enter", "review", 0}, {"Tab", "next", 0}, {"Esc", "cancel", 0}}
+	switch cs.focus {
+	case cleanupFocusScripts:
+		hs = append(hs, hint{"Space", "tick", 1}, hint{"a", "all/none", 2}, hint{"↑↓", "move", 3})
+	case cleanupFocusMode:
+		hs = append(hs, hint{"←→", "mode", 1})
+	}
+	return spec, body, []string{renderHints(cw, hs)}
+}
+
+// cleanupReviewDialog is step 2: what will be deleted, and a final Enter.
+func (m *model) cleanupReviewDialog(spec modalSpec, cw, h int) (modalSpec, []string, []string) {
+	cs := &m.ui.cleanup
+	spec.title, spec.subtitle, spec.danger = "Confirm cleanup", "cannot be undone", true
+	opts, _ := m.cleanupOptions()
+	files, folders := cleanupTotals(cs.plan)
+
+	body := []string{tMuted("Remove: " + opts.describe()), ""}
+	visible := clampInt(h-12, 3, 12)
+	rows := cs.plan
+	if len(rows) > visible {
+		rows = rows[:visible]
+	}
+	nameW := max(8, cw-30)
+	for _, t := range rows {
+		del := tDim(fit("nothing to delete", 17))
+		if len(t.Paths) > 0 {
+			del = paintB(fit(fmt.Sprintf("delete %d", len(t.Paths)), 17), pal.fail)
+		}
+		keep := tDim(fmt.Sprintf("keep %d", t.Kept))
+		if t.Protected > 0 {
+			keep += tDim(fmt.Sprintf(" (%d running)", t.Protected))
+		}
+		body = append(body, "  "+tText(fit(truncate(oneLine(t.Alias), nameW), nameW))+" "+del+" "+keep)
+	}
+	if extra := len(cs.plan) - len(rows); extra > 0 {
+		body = append(body, "  "+tDim(fmt.Sprintf("… and %d more", extra)))
+	}
+	body = append(body, "",
+		paintB(truncate(fmt.Sprintf("⚠ %d record(s) from %d folder(s) will be deleted.", files, folders), cw), pal.fail))
+	footer := []string{renderHints(cw, []hint{{"Enter", "delete", 0}, {"Esc", "back", 0}})}
 	return spec, body, footer
 }
 

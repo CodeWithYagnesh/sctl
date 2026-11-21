@@ -106,8 +106,9 @@ func initialModel() *model {
 	groupInputs[0].Focus()
 
 	cleanupInput := textinput.New()
-	cleanupInput.Placeholder = "older than days, empty = all"
-	cleanupInput.Width = 30
+	cleanupInput.Placeholder = "1"
+	cleanupInput.Width = 8
+	cleanupInput.CharLimit = 5
 
 	m := &model{
 		config:            cfg,
@@ -377,53 +378,184 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) updateCleanup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	cs := &m.ui.cleanup
 	key := msg.String()
+
+	// Step 2: review. Nothing is deleted before Enter is pressed here.
+	if cs.confirm {
+		switch key {
+		case "enter":
+			return m, m.runCleanup()
+		case "esc", "backspace":
+			cs.confirm = false
+		}
+		return m, nil
+	}
+
 	switch key {
 	case "esc":
 		m.cleanupMode = false
 		return m, nil
-	case "tab", "shift+tab":
-		if m.selected() != nil {
-			m.cleanupModeAll = !m.cleanupModeAll
-		}
-		m.ui.cleanupArmed = false
+	case "tab":
+		m.cleanupMoveFocus(1)
+		return m, nil
+	case "shift+tab":
+		m.cleanupMoveFocus(-1)
 		return m, nil
 	case "enter":
-		older := -1
-		val := strings.TrimSpace(m.cleanupInput.Value())
-		if val != "" {
-			n, err := strconv.Atoi(val)
-			if err != nil || n < 0 {
-				m.say("Error: days must be a whole number (or empty)")
-				m.ui.cleanupArmed = false
-				return m, nil
+		m.reviewCleanup()
+		return m, nil
+	}
+	cs.notice = ""
+
+	switch cs.focus {
+	case cleanupFocusScripts:
+		switch key {
+		case "up", "k":
+			cs.cursor = clampInt(cs.cursor-1, 0, max(0, len(m.scripts)-1))
+		case "down", "j":
+			cs.cursor = clampInt(cs.cursor+1, 0, max(0, len(m.scripts)-1))
+		case " ":
+			if cs.cursor >= 0 && cs.cursor < len(m.scripts) {
+				a := m.scripts[cs.cursor].Config.NameAlias
+				cs.checked[a] = !cs.checked[a]
 			}
-			older = n
+		case "a":
+			all := true
+			for _, s := range m.scripts {
+				if !cs.checked[s.Config.NameAlias] {
+					all = false
+				}
+			}
+			for _, s := range m.scripts {
+				cs.checked[s.Config.NameAlias] = !all
+			}
 		}
-		// Deleting every run record is irreversible: ask for a second Enter.
-		if older < 0 && !m.ui.cleanupArmed {
-			m.ui.cleanupArmed = true
+	case cleanupFocusMode:
+		switch key {
+		case "left", "h", "up", "k":
+			m.cleanupSetMode((cs.mode + 2) % 3)
+		case "right", "l", "down", "j", " ":
+			m.cleanupSetMode((cs.mode + 1) % 3)
+		}
+	case cleanupFocusValue:
+		if cs.mode == CleanupAll {
 			return m, nil
 		}
-		alias := ""
-		if !m.cleanupModeAll {
-			alias = m.cleanupAlias
+		if msg.Type == tea.KeyRunes {
+			for _, r := range msg.Runes {
+				if r < '0' || r > '9' {
+					return m, nil // numbers only
+				}
+			}
 		}
-		deleted, err := cleanupTasks(m.config, alias, older)
-		if err != nil {
-			m.say("Error: cleanup failed: %v", err)
-		} else {
-			m.say("Cleanup complete — deleted %d run record(s)", deleted)
-		}
-		m.cleanupMode = false
-		m.ui.cleanupArmed = false
-		m.ui.hist = nil
-		return m, m.ensureHistory(false)
+		var cmd tea.Cmd
+		m.cleanupInput, cmd = m.cleanupInput.Update(msg)
+		return m, cmd
 	}
-	m.ui.cleanupArmed = false
-	var cmd tea.Cmd
-	m.cleanupInput, cmd = m.cleanupInput.Update(msg)
-	return m, cmd
+	return m, nil
+}
+
+func (m *model) cleanupMoveFocus(dir int) {
+	cs := &m.ui.cleanup
+	cs.focus = (cs.focus + dir + cleanupFocusCount) % cleanupFocusCount
+	cs.notice = ""
+	if cs.focus == cleanupFocusValue && cs.mode != CleanupAll {
+		m.cleanupInput.Focus()
+	} else {
+		m.cleanupInput.Blur()
+	}
+}
+
+// cleanupSetMode switches mode and resets the number to that mode's default.
+func (m *model) cleanupSetMode(mode CleanupMode) {
+	m.ui.cleanup.mode = mode
+	switch mode {
+	case CleanupKeepLast:
+		m.cleanupInput.SetValue(strconv.Itoa(defaultKeepLast))
+	case CleanupOlderThan:
+		m.cleanupInput.SetValue(strconv.Itoa(defaultOlderDays))
+	default:
+		m.cleanupInput.SetValue("")
+	}
+}
+
+// cleanupOptions reads the dialog's mode and number.
+func (m *model) cleanupOptions() (CleanupOptions, error) {
+	opts := CleanupOptions{Mode: m.ui.cleanup.mode}
+	if opts.Mode == CleanupAll {
+		return opts, nil
+	}
+	val := strings.TrimSpace(m.cleanupInput.Value())
+	n, err := strconv.Atoi(val)
+	if err != nil || n < 0 {
+		if opts.Mode == CleanupKeepLast {
+			return opts, fmt.Errorf("enter how many records to keep (0 or more)")
+		}
+		return opts, fmt.Errorf("enter the number of days (0 or more)")
+	}
+	opts.Value = n
+	return opts, nil
+}
+
+// runningTasks lists the run records that belong to tasks still running.
+func (m *model) runningTasks() map[string]map[int]bool {
+	out := map[string]map[int]bool{}
+	for _, s := range m.scripts {
+		if s.State != "Running" || s.TaskID <= 0 || s.Config.OutputFolderPath == "" {
+			continue
+		}
+		dir := filepath.Clean(s.Config.OutputFolderPath)
+		if out[dir] == nil {
+			out[dir] = map[int]bool{}
+		}
+		out[dir][s.TaskID] = true
+	}
+	return out
+}
+
+// reviewCleanup validates the dialog and moves to the confirmation step.
+func (m *model) reviewCleanup() {
+	cs := &m.ui.cleanup
+	var picked []ScriptConfig
+	for _, s := range m.scripts {
+		if cs.checked[s.Config.NameAlias] {
+			picked = append(picked, s.Config)
+		}
+	}
+	if len(picked) == 0 {
+		m.say("Error: tick at least one script (Space)")
+		return
+	}
+	opts, err := m.cleanupOptions()
+	if err != nil {
+		m.say("Error: %v", err)
+		return
+	}
+	cs.plan = planCleanup(picked, opts, m.runningTasks())
+	if files, _ := cleanupTotals(cs.plan); files == 0 {
+		cs.notice = "Nothing to delete — no records match."
+		return
+	}
+	cs.confirm = true
+	m.statusMsg = ""
+}
+
+// runCleanup deletes the reviewed plan and closes the dialog.
+func (m *model) runCleanup() tea.Cmd {
+	cs := &m.ui.cleanup
+	deleted, err := applyCleanup(cs.plan)
+	if err != nil {
+		m.say("Error: cleanup failed: %v", err)
+	} else {
+		m.say("Cleanup complete — deleted %d run record(s)", deleted)
+	}
+	m.cleanupMode = false
+	cs.confirm = false
+	cs.plan = nil
+	m.ui.viewing = nil
+	m.ui.hist = nil
+	return m.ensureHistory(false)
 }
 
 func (m *model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

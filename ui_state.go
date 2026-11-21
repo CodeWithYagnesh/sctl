@@ -37,17 +37,37 @@ var tabNames = [tabCount]string{"Logs", "Runs", "Config"}
 // zero value is valid (follow mode on, Logs tab, empty caches), so tests and
 // code that build a bare model keep working.
 type uiState struct {
-	tab          int      // active detail tab
-	paused       bool     // log auto-follow is paused (user scrolled up)
-	logsDirty    bool     // new log text arrived; refresh viewport on next frame
-	animating    bool     // fast render ticker is running
-	tabScroll    int      // scroll offset for the Config tab
-	revealEnv    bool     // show secret-looking env values in the Config tab
-	viewing      *runView // an old run shown in the Logs tab instead of live output
-	helpScroll   int
-	helpReturn   string // view to return to when help closes
-	cleanupArmed bool   // an "everything" cleanup needs a second Enter
-	hist         map[string]*histEntry
+	tab        int      // active detail tab
+	paused     bool     // log auto-follow is paused (user scrolled up)
+	logsDirty  bool     // new log text arrived; refresh viewport on next frame
+	animating  bool     // fast render ticker is running
+	tabScroll  int      // scroll offset for the Config tab
+	revealEnv  bool     // show secret-looking env values in the Config tab
+	viewing    *runView // an old run shown in the Logs tab instead of live output
+	helpScroll int
+	helpReturn string // view to return to when help closes
+	cleanup    cleanupState
+	hist       map[string]*histEntry
+}
+
+// Focus areas of the cleanup dialog.
+const (
+	cleanupFocusScripts = iota
+	cleanupFocusMode
+	cleanupFocusValue
+	cleanupFocusCount
+)
+
+// cleanupState is the cleanup dialog: which scripts are ticked, which mode is
+// chosen, and (after Enter) the reviewed plan waiting for confirmation.
+type cleanupState struct {
+	focus   int
+	cursor  int
+	checked map[string]bool // by script alias
+	mode    CleanupMode
+	confirm bool // showing the review step
+	plan    []cleanupTarget
+	notice  string
 }
 
 // runView is a past run loaded from disk for reading in the Logs tab.
