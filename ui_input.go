@@ -7,6 +7,7 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"strconv"
 )
 
 // Update is the single entry point for every message. It handles the UI-only
@@ -151,17 +152,14 @@ func (m *model) openSettings() {
 
 func (m *model) openCleanup() {
 	m.cleanupMode = true
-	m.cleanupModeAll = false
-	m.cleanupAlias = ""
+	cs := cleanupState{checked: map[string]bool{}, mode: CleanupKeepLast}
 	if s := m.selected(); s != nil {
-		m.cleanupAlias = s.Config.NameAlias
-	} else {
-		m.cleanupModeAll = true
+		cs.checked[s.Config.NameAlias] = true
+		cs.cursor = clampInt(m.cursor, 0, len(m.scripts)-1)
 	}
-	m.cleanupOlderDays = -1
-	m.ui.cleanupArmed = false
-	m.cleanupInput.SetValue("")
-	m.cleanupInput.Focus()
+	m.ui.cleanup = cs
+	m.cleanupInput.SetValue(strconv.Itoa(defaultKeepLast))
+	m.cleanupInput.Blur()
 }
 
 // currentLogs returns the log text the Logs tab is showing.

@@ -158,12 +158,9 @@ type model struct {
 	groupScriptCursor  int
 	groupDetailScroll  int
 
-	// Cleanup popup state
-	cleanupMode      bool
-	cleanupAlias     string
-	cleanupOlderDays int
-	cleanupInput     textinput.Model
-	cleanupModeAll   bool
+	// Cleanup popup state (the rest lives in ui.cleanup)
+	cleanupMode  bool
+	cleanupInput textinput.Model
 
 	// Settings popup state
 	settingsMode   bool

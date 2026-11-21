@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -246,12 +248,38 @@ func printHelp() {
 	fmt.Println()
 }
 
+func printCleanupUsage() {
+	fmt.Println("Usage: sctl cleanup (--all | --alias <a,b,...>) [mode] [--yes]")
+	fmt.Println()
+	fmt.Println("Deletes saved run records (task_<id>.yaml). HTML reports are never touched.")
+	fmt.Println()
+	fmt.Println("Scripts:")
+	fmt.Println("  --all                 every script")
+	fmt.Println("  --alias <a,b,...>     only these scripts (repeatable)")
+	fmt.Println()
+	fmt.Println("Mode (pick one):")
+	fmt.Println("  --keep-last [N]       keep the newest N records per script (default: 1)")
+	fmt.Println("  --older-than <days>   delete records older than <days> days")
+	fmt.Println("  --remove-all          delete every record")
+	fmt.Println()
+	fmt.Println("  --yes                 skip the confirmation prompt")
+}
+
 func handleCleanupCmd(args []string) {
 	if len(args) == 0 {
-		fmt.Println("Usage: sctl cleanup [--all] [--alias <name>] [--older-than <days>] [--confirm]")
-		fmt.Println("  --all          Delete task_*.yaml files for all scripts")
-		fmt.Println("  --alias <name> Clean only specified script")
-		fmt.Println("  --older-than N Delete files older than N days")
+		printCleanupUsage()
+		os.Exit(1)
+	}
+	for _, a := range args {
+		if a == "-h" || a == "--help" {
+			printCleanupUsage()
+			os.Exit(0)
+		}
+	}
+	ca, err := parseCleanupArgs(normalizeKeepLast(args))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n\n", err)
+		printCleanupUsage()
 		os.Exit(1)
 	}
 	cfg, err := LoadConfig()
@@ -259,75 +287,54 @@ func handleCleanupCmd(args []string) {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)
 	}
-	alias := ""
-	var olderThan int = -1
-	confirm := false
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--all":
-			// all scripts will be processed by default
-		case "--alias":
-			if i+1 < len(args) {
-				alias = args[i+1]
-				i++
-			}
-		case "--older-than":
-			if i+1 < len(args) {
-				fmt.Sscanf(args[i+1], "%d", &olderThan)
-				i++
-			}
-		case "--confirm":
-			confirm = true
-		}
-	}
-	if !confirm {
-		fmt.Println("This will delete task files. Use --confirm to proceed.")
+	scripts, err := selectScripts(cfg, ca.Aliases, ca.All)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	deleted := 0
-	scripts := cfg.Scripts
-	if alias != "" {
-		var filtered []ScriptConfig
-		for _, s := range cfg.Scripts {
-			if s.NameAlias == alias {
-				filtered = append(filtered, s)
-			}
-		}
-		scripts = filtered
-	}
 	if len(scripts) == 0 {
-		fmt.Println("No scripts matched")
-		os.Exit(0)
+		fmt.Println("No scripts matched.")
+		return
 	}
-	cutoff := time.Time{}
-	if olderThan >= 0 {
-		cutoff = time.Now().AddDate(0, 0, -olderThan)
+
+	plan := planCleanup(scripts, ca.Opts, nil)
+	files, folders := cleanupTotals(plan)
+	fmt.Printf("Cleanup: %s\n", ca.Opts.describe())
+	for _, t := range plan {
+		fmt.Printf("  %-24s delete %d, keep %d\n", t.Alias, len(t.Paths), t.Kept)
 	}
-	for _, s := range scripts {
-		dir := s.OutputFolderPath
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			continue
+	if files == 0 {
+		fmt.Println("Nothing to delete.")
+		return
+	}
+	if !ca.Yes {
+		fmt.Printf("Delete %d task file(s) from %d script folder(s)? [y/N] ", files, folders)
+		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		if ans := strings.ToLower(strings.TrimSpace(line)); ans != "y" && ans != "yes" {
+			fmt.Println("Aborted.")
+			os.Exit(1)
 		}
-		for _, e := range entries {
-			if !strings.HasPrefix(e.Name(), "task_") || !strings.HasSuffix(e.Name(), ".yaml") {
-				continue
-			}
-			path := filepath.Join(dir, e.Name())
-			info, err := os.Stat(path)
-			if err != nil {
-				continue
-			}
-			if olderThan >= 0 && info.ModTime().After(cutoff) {
-				continue
-			}
-			if err := os.Remove(path); err == nil {
-				deleted++
-				fmt.Printf("Deleted %s\n", path)
-			}
-		}
+	}
+	deleted, err := applyCleanup(plan)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 	}
 	fmt.Printf("Cleanup complete. Deleted %d task file(s).\n", deleted)
+	if err != nil {
+		os.Exit(1)
+	}
+}
+
+// normalizeKeepLast lets `--keep-last` be written without a number (meaning 1).
+func normalizeKeepLast(args []string) []string {
+	out := make([]string, 0, len(args)+1)
+	for i, a := range args {
+		out = append(out, a)
+		if a == "--keep-last" && (i+1 >= len(args) || strings.HasPrefix(args[i+1], "-")) {
+			out = append(out, strconv.Itoa(defaultKeepLast))
+		}
+	}
+	return out
 }
 
 func handleConfigCmd(args []string) {
